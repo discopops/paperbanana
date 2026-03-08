@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
+import ipaddress
+import re
+import socket
+from io import BytesIO
 from pathlib import Path
+from urllib.parse import urlparse
 
+import httpx
 import structlog
+from PIL import Image
 
 from paperbanana.agents.base import BaseAgent
-from paperbanana.core.types import DiagramType, ReferenceExample, ReferencePatterns
+from paperbanana.core.types import DiagramType, ReferenceExample
 from paperbanana.core.utils import load_image
 from paperbanana.providers.base import VLMProvider
 
@@ -22,14 +30,8 @@ class PlannerAgent(BaseAgent):
     can render. Matches paper equation 4: P = VLM_plan(S, C, {(S_i, C_i, I_i)}).
     """
 
-    def __init__(
-        self,
-        vlm_provider: VLMProvider,
-        prompt_dir: str = "prompts",
-        enable_reference_analysis: bool = False,
-    ):
+    def __init__(self, vlm_provider: VLMProvider, prompt_dir: str = "prompts"):
         super().__init__(vlm_provider, prompt_dir)
-        self._enable_reference_analysis = enable_reference_analysis
 
     @property
     def agent_name(self) -> str:
@@ -41,7 +43,8 @@ class PlannerAgent(BaseAgent):
         caption: str,
         examples: list[ReferenceExample],
         diagram_type: DiagramType = DiagramType.METHODOLOGY,
-    ) -> str:
+        supported_ratios: list[str] | None = None,
+    ) -> tuple[str, str | None]:
         """Generate a detailed textual description of the target diagram.
 
         Args:
@@ -49,41 +52,28 @@ class PlannerAgent(BaseAgent):
             caption: Communicative intent / figure caption.
             examples: Retrieved reference examples for in-context learning.
             diagram_type: Type of diagram being generated.
+            supported_ratios: Aspect ratios the image provider supports.
 
         Returns:
-            Detailed textual description for the Visualizer.
+            Tuple of (description, recommended_ratio).
+            recommended_ratio is a string like '16:9' or None if not provided.
         """
-        # PHASE 1: Reference Pattern Analysis (NEW - Optional)
-        reference_patterns = None
-        if self._enable_reference_analysis and self.vlm.supports_code_execution():
-            logger.info("Analyzing reference patterns with agentic vision")
-            reference_patterns = await self._analyze_reference_patterns(examples)
-            logger.info(
-                "Reference pattern analysis complete",
-                has_layout=reference_patterns.layout_structure is not None,
-                num_colors=len(reference_patterns.color_palette),
-            )
-
-        # PHASE 2: Description Generation (EXISTING - Enhanced with patterns)
         # Format examples for in-context learning
         examples_text = self._format_examples(examples)
 
         # Load reference images for visual in-context learning
-        example_images = self._load_example_images(examples)
-
-        # Include reference patterns in prompt if available
-        pattern_context = ""
-        if reference_patterns:
-            pattern_context = self._format_pattern_context(reference_patterns)
+        example_images = await asyncio.to_thread(self._load_example_images, examples)
 
         prompt_type = "diagram" if diagram_type == DiagramType.METHODOLOGY else "plot"
         template = self.load_prompt(prompt_type)
+        # Inject supported ratios into the prompt template
+        ratios_str = ", ".join(supported_ratios) if supported_ratios else "1:1, 16:9"
         prompt = self.format_prompt(
             template,
             source_context=source_context,
             caption=caption,
             examples=examples_text,
-            reference_patterns=pattern_context,
+            supported_ratios=ratios_str,
         )
 
         logger.info(
@@ -93,15 +83,20 @@ class PlannerAgent(BaseAgent):
             context_length=len(source_context),
         )
 
-        description = await self.vlm.generate(
+        raw_output = await self.vlm.generate(
             prompt=prompt,
             images=example_images if example_images else None,
             temperature=0.7,
             max_tokens=4096,
         )
 
-        logger.info("Planner generated description", length=len(description))
-        return description
+        description, ratio = self._parse_ratio(raw_output)
+        logger.info(
+            "Planner generated description",
+            length=len(description),
+            recommended_ratio=ratio,
+        )
+        return description, ratio
 
     def _format_examples(self, examples: list[ReferenceExample]) -> str:
         """Format reference examples for the planner prompt.
@@ -121,31 +116,120 @@ class PlannerAgent(BaseAgent):
                 img_index += 1
                 image_ref = f"\n**Diagram**: [See reference image {img_index} above]"
 
+            ratio_info = ""
+            if ex.aspect_ratio:
+                ratio_info = f"\n**Aspect Ratio**: {ex.aspect_ratio:.2f}"
+
+            structure_info = ""
+            if ex.structure_hints:
+                hints_text = str(ex.structure_hints)
+                structure_info = f"\n**Structure Hints**: {hints_text[:240]}"
+
             lines.append(
                 f"### Example {i}\n"
                 f"**Caption**: {ex.caption}\n"
                 f"**Source Context**: {ex.source_context[:500]}"
+                f"{ratio_info}"
+                f"{structure_info}"
                 f"{image_ref}\n"
             )
         return "\n".join(lines)
 
     def _has_valid_image(self, example: ReferenceExample) -> bool:
-        """Check if a reference example has a valid image file."""
-        if not example.image_path:
+        """Check if a reference example has a loadable image (local path or http(s) URL)."""
+        if not example.image_path or not example.image_path.strip():
             return False
-        return Path(example.image_path).exists()
+        path = example.image_path.strip()
+        if self._is_remote_url(path):
+            return self._is_safe_remote_image_url(path)
+        return Path(path).exists()
+
+    @staticmethod
+    def _is_remote_url(path: str) -> bool:
+        return path.startswith(("http://", "https://"))
+
+    @classmethod
+    def _is_safe_remote_image_url(cls, image_url: str) -> bool:
+        parsed = urlparse(image_url)
+        if parsed.scheme != "https":
+            return False
+        if not parsed.hostname:
+            return False
+        if parsed.username or parsed.password:
+            return False
+
+        host = parsed.hostname.lower()
+        if host in cls._LOCAL_HOSTNAMES or host.endswith(".local"):
+            return False
+
+        try:
+            ip = ipaddress.ip_address(host)
+        except ValueError:
+            return True
+        return ip.is_global
+
+    @staticmethod
+    def _hostname_resolves_to_global_addresses(hostname: str) -> bool:
+        try:
+            infos = socket.getaddrinfo(hostname, 443, type=socket.SOCK_STREAM)
+        except socket.gaierror:
+            return False
+        if not infos:
+            return False
+
+        for info in infos:
+            address = info[4][0]
+            try:
+                ip = ipaddress.ip_address(address)
+            except ValueError:
+                return False
+            if not ip.is_global:
+                return False
+        return True
+
+    def _fetch_remote_image(self, image_url: str) -> Image.Image:
+        parsed = urlparse(image_url)
+        hostname = parsed.hostname
+        if not hostname:
+            raise ValueError("remote image URL is missing hostname")
+        if not self._hostname_resolves_to_global_addresses(hostname):
+            raise ValueError("remote image hostname resolves to non-public address")
+
+        with httpx.Client(
+            timeout=self._REMOTE_IMAGE_TIMEOUT_SECONDS,
+            follow_redirects=False,
+        ) as client:
+            response = client.get(image_url)
+            if 300 <= response.status_code < 400:
+                raise ValueError("remote image redirects are not allowed")
+            response.raise_for_status()
+
+            content_type = (response.headers.get("content-type") or "").lower()
+            if not content_type.startswith("image/"):
+                raise ValueError("remote URL did not return an image content type")
+
+            data = response.content
+            if len(data) > self._MAX_REMOTE_IMAGE_BYTES:
+                raise ValueError(f"remote image exceeds {self._MAX_REMOTE_IMAGE_BYTES} byte limit")
+
+        return Image.open(BytesIO(data)).convert("RGB")
 
     def _load_example_images(self, examples: list[ReferenceExample]) -> list:
-        """Load reference images from disk for in-context learning.
+        """Load reference images from disk or URL for in-context learning.
 
         Returns a list of PIL Image objects for examples that have valid images.
+        Supports local paths and http(s) URLs (e.g. from external exemplar adapters).
         """
         images = []
         for ex in examples:
             if not self._has_valid_image(ex):
                 continue
             try:
-                img = load_image(ex.image_path)
+                path = ex.image_path.strip()
+                if self._is_remote_url(path):
+                    img = self._fetch_remote_image(path)
+                else:
+                    img = load_image(path)
                 images.append(img)
             except Exception as e:
                 logger.warning(
@@ -155,117 +239,27 @@ class PlannerAgent(BaseAgent):
                 )
         return images
 
-    async def _analyze_reference_patterns(
-        self, examples: list[ReferenceExample]
-    ) -> ReferencePatterns:
-        """Analyze visual patterns from reference examples using code execution.
+    _VALID_RATIOS = {"1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"}
 
-        Uses Gemini 3 Flash's agentic vision to extract quantitative design
-        patterns from reference diagrams, informing better initial descriptions.
+    @classmethod
+    def _parse_ratio(cls, text: str) -> tuple[str, str | None]:
+        """Extract RECOMMENDED_RATIO from planner output and return clean description."""
+        match = re.search(r"RECOMMENDED_RATIO:\s*([\d:]+)", text)
+        if match:
+            ratio = match.group(1).strip()
+            if ratio in cls._VALID_RATIOS:
+                # Remove the ratio line (and surrounding markdown fences) from description
+                clean = re.sub(
+                    r"\n*```\n*RECOMMENDED_RATIO:.*?\n*```\n*",
+                    "",
+                    text,
+                ).strip()
+                # Also handle case without fences
+                clean = re.sub(r"\n*RECOMMENDED_RATIO:.*", "", clean).strip()
+                return clean, ratio
+            logger.warning("Planner returned invalid ratio", ratio=ratio)
+        return text.strip(), None
 
-        Args:
-            examples: Reference examples with images to analyze.
-
-        Returns:
-            ReferencePatterns with extracted visual patterns.
-        """
-        # Load reference images (analyze top 5)
-        example_images = self._load_example_images(examples[:5])
-        if not example_images:
-            logger.warning("No reference images available for pattern analysis")
-            return ReferencePatterns()
-
-        analysis_prompt = f"""You are a visual design pattern expert with Python code execution.
-
-Analyze these {len(example_images)} reference academic diagrams to extract successful design patterns.
-
-Use Python + PIL/numpy/matplotlib to:
-
-1. LAYOUT STRUCTURE
-   - Identify dominant layout pattern (vertical/horizontal flow, grid, etc.)
-   - Measure component distribution and hierarchy
-   - Calculate spacing and margin ratios
-
-2. COLOR ANALYSIS
-   - Extract color palette (dominant colors as hex codes)
-   - Identify color roles (background, text, accent, etc.)
-
-3. TYPOGRAPHY PATTERNS
-   - Estimate text sizes for different roles (title, labels, body)
-   - Identify font hierarchy patterns
-
-4. VISUAL FLOW
-   - Determine reading order (top-to-bottom, left-to-right, etc.)
-   - Identify connection patterns (arrows, lines, grouping boxes)
-
-5. SUCCESSFUL PATTERNS
-   - What makes these diagrams effective?
-   - Common design elements that appear consistently
-
-Output JSON:
-{{
-    "layout_structure": "vertical flow with horizontal sub-components",
-    "component_hierarchy": {{"main_boxes": 3, "sub_components": 8}},
-    "color_palette": ["#FFFFFF", "#E8F4F8", "#FFE4CC"],
-    "spacing_ratios": {{"margin": 0.08, "padding": 0.05, "gap": 0.03}},
-    "text_sizes": {{"title": 16, "labels": 12, "body": 10}},
-    "visual_flow": "top-to-bottom with left-to-right reading",
-    "successful_patterns": ["Consistent color coding", "Clear visual hierarchy", "Adequate whitespace"]
-}}
-"""
-
-        try:
-            response = await self.vlm.generate_with_tools(
-                prompt=analysis_prompt,
-                images=example_images,
-                temperature=0.1,  # Low temp for deterministic analysis
-                max_tokens=4096,
-                response_format="json",
-                tools=["code_execution"],
-            )
-            return self._parse_reference_patterns(response)
-        except Exception as e:
-            logger.error(
-                "Reference pattern analysis failed",
-                error=str(e),
-                error_type=type(e).__name__,
-            )
-            return ReferencePatterns()
-
-    def _parse_reference_patterns(self, response: str) -> ReferencePatterns:
-        """Parse JSON response into ReferencePatterns model."""
-        import json
-
-        try:
-            data = json.loads(response)
-            return ReferencePatterns(**data, raw_output=response)
-        except Exception as e:
-            logger.warning("Failed to parse reference patterns", error=str(e))
-            return ReferencePatterns(raw_output=response)
-
-    def _format_pattern_context(self, patterns: ReferencePatterns) -> str:
-        """Format reference patterns for inclusion in planner prompt."""
-        parts = ["REFERENCE VISUAL PATTERNS (from successful diagrams):"]
-
-        if patterns.layout_structure:
-            parts.append(f"Layout: {patterns.layout_structure}")
-
-        if patterns.color_palette:
-            parts.append(f"Color Palette: {', '.join(patterns.color_palette)}")
-
-        if patterns.spacing_ratios:
-            ratios = ", ".join(f"{k}={v:.2f}" for k, v in patterns.spacing_ratios.items())
-            parts.append(f"Spacing Ratios: {ratios}")
-
-        if patterns.text_sizes:
-            sizes = ", ".join(f"{k}={v}pt" for k, v in patterns.text_sizes.items())
-            parts.append(f"Text Sizes: {sizes}")
-
-        if patterns.visual_flow:
-            parts.append(f"Visual Flow: {patterns.visual_flow}")
-
-        if patterns.successful_patterns:
-            parts.append("Successful Patterns:")
-            parts.extend(f"  - {p}" for p in patterns.successful_patterns)
-
-        return "\n".join(parts)
+    _REMOTE_IMAGE_TIMEOUT_SECONDS = 10.0
+    _MAX_REMOTE_IMAGE_BYTES = 5 * 1024 * 1024
+    _LOCAL_HOSTNAMES = {"localhost", "localhost.localdomain"}

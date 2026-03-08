@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Optional
 
 import structlog
 
@@ -41,6 +42,7 @@ class CriticAgent(BaseAgent):
         source_context: str,
         caption: str,
         diagram_type: DiagramType = DiagramType.METHODOLOGY,
+        user_feedback: Optional[str] = None,
     ) -> CritiqueResult:
         """Evaluate a generated image and provide revision feedback.
 
@@ -50,6 +52,7 @@ class CriticAgent(BaseAgent):
             source_context: Original methodology text.
             caption: Figure caption / communicative intent.
             diagram_type: Type of diagram.
+            user_feedback: Optional user comments for the critic to consider.
 
         Returns:
             CritiqueResult with evaluation and optional revised description.
@@ -84,6 +87,11 @@ class CriticAgent(BaseAgent):
             description=description,
             visual_analysis=extra_context,
         )
+
+        if user_feedback:
+            prompt += (
+                f"\n\nAdditional user feedback to consider in your evaluation:\n{user_feedback}"
+            )
 
         logger.info("Running critic agent", image_path=image_path)
 

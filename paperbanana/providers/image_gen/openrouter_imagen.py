@@ -63,6 +63,11 @@ class OpenRouterImageGen(ImageGenProvider):
     def is_available(self) -> bool:
         return self._api_key is not None
 
+    @property
+    def supported_ratios(self) -> list[str]:
+        # Prompt-based hints — any ratio is conceptually supported
+        return ["1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"]
+
     def _aspect_ratio_hint(self, width: int, height: int) -> str:
         """Turn pixel dimensions into a human-readable aspect ratio hint for the prompt."""
         ratio = width / height
@@ -84,12 +89,16 @@ class OpenRouterImageGen(ImageGenProvider):
         width: int = 1024,
         height: int = 1024,
         seed: Optional[int] = None,
+        aspect_ratio: Optional[str] = None,
     ) -> Image.Image:
         client = self._get_client()
 
         # OpenRouter doesn't have native aspect-ratio params like the Google SDK,
         # so we bake the desired format into the prompt itself.
-        aspect_hint = self._aspect_ratio_hint(width, height)
+        if aspect_ratio:
+            aspect_hint = f"{aspect_ratio} format"
+        else:
+            aspect_hint = self._aspect_ratio_hint(width, height)
         full_prompt = f"{prompt}\n\nGenerate this as a {aspect_hint} image."
         if negative_prompt:
             full_prompt += f"\n\nAvoid: {negative_prompt}"

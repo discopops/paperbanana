@@ -70,3 +70,4 @@ CLAUDE.md
 .pytest_cache/
 .venv/
 .env
+uv.lock
