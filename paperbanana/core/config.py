@@ -71,6 +71,22 @@ class Settings(BaseSettings):
     output_dir: str = "outputs"
     save_iterations: bool = True
 
+    # Agentic Vision settings (NEW - opt-in)
+    planner_enable_reference_analysis: bool = False
+    planner_reference_analysis_model: str = "gemini-3-flash-preview"
+    critic_enable_visual_analysis: bool = False
+    critic_visual_analysis_model: str = "gemini-3-flash-preview"
+
+    # Input format settings
+    default_input_format: str = "auto"  # Auto-detect by default
+    pdf_extract_methodology: bool = True
+    pdf_use_vlm_extraction: bool = False  # Opt-in for VLM-based extraction
+
+    # Export format settings
+    default_export_formats: str = "png"  # Comma-separated
+    export_dpi: int = 300
+    export_quality: int = 95
+
     # API Keys (loaded from environment)
     google_api_key: Optional[str] = Field(default=None, alias="GOOGLE_API_KEY")
     openrouter_api_key: Optional[str] = Field(default=None, alias="OPENROUTER_API_KEY")
@@ -110,6 +126,10 @@ def _flatten_yaml(config: dict, prefix: str = "") -> dict:
         "reference.guidelines_path": "guidelines_path",
         "output.dir": "output_dir",
         "output.save_iterations": "save_iterations",
+        "planner.enable_reference_analysis": "planner_enable_reference_analysis",
+        "planner.reference_analysis_model": "planner_reference_analysis_model",
+        "critic.enable_visual_analysis": "critic_enable_visual_analysis",
+        "critic.visual_analysis_model": "critic_visual_analysis_model",
     }
 
     def _recurse(d: dict, prefix: str = "") -> None:

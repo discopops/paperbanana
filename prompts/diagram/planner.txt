@@ -23,4 +23,9 @@ Your description should cover:
 ## Reference Examples
 {examples}
 
+## Reference Visual Patterns (Optional)
+{reference_patterns}
+
+Use the quantitative patterns above (if provided) from successful diagrams to inform your description. Match the layout structure, color palette, and spacing ratios where appropriate for a professional, publication-quality result.
+
 Based on the methodology section, figure caption, and learning from the style and structure of the reference examples above, generate a comprehensive and detailed textual description of the methodology diagram.

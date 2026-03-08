@@ -29,6 +29,15 @@ output:
   save_prompts: true
   save_metadata: true
 
+# Agentic Vision settings (opt-in, requires Gemini 3 Flash)
+planner:
+  enable_reference_analysis: false  # Enable reference pattern analysis (planning phase)
+  reference_analysis_model: gemini-3-flash-preview
+
+critic:
+  enable_visual_analysis: false  # Enable visual analysis (critique phase)
+  visual_analysis_model: gemini-3-flash-preview
+
 # Logging
 logging:
   level: INFO

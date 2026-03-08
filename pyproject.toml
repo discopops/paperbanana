@@ -51,7 +51,22 @@ dev = [
     "pytest-cov>=4.0",
     "ruff>=0.4",
 ]
+# Input format dependencies
 pdf = ["pymupdf>=1.24"]
+docx = ["python-docx>=1.0"]
+html = ["beautifulsoup4>=4.12", "lxml>=5.0"]
+markdown = ["mistune>=3.0"]
+# Export format dependencies
+export-pdf = ["reportlab>=4.0"]
+# Convenience bundles
+all-formats = [
+    "pymupdf>=1.24",
+    "python-docx>=1.0",
+    "beautifulsoup4>=4.12",
+    "lxml>=5.0",
+    "mistune>=3.0",
+    "reportlab>=4.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/llmsresearch/paperbanana"

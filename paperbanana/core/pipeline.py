@@ -125,7 +125,23 @@ class PaperBananaPipeline:
         # Initialize agents
         prompt_dir = self._find_prompt_dir()
         self.retriever = RetrieverAgent(self._vlm, prompt_dir=prompt_dir)
-        self.planner = PlannerAgent(self._vlm, prompt_dir=prompt_dir)
+
+        # Planner with optional reference analysis (agentic vision)
+        planner_vlm = self._vlm
+        if self.settings.planner_enable_reference_analysis and not self._demo_mode:
+            planner_vlm = ProviderRegistry.create_vlm(
+                Settings(
+                    vlm_provider="gemini",
+                    vlm_model=self.settings.planner_reference_analysis_model,
+                    google_api_key=self.settings.google_api_key,
+                )
+            )
+        self.planner = PlannerAgent(
+            planner_vlm,
+            prompt_dir=prompt_dir,
+            enable_reference_analysis=self.settings.planner_enable_reference_analysis,
+        )
+
         self.stylist = StylistAgent(
             self._vlm, guidelines=self._methodology_guidelines, prompt_dir=prompt_dir
         )
@@ -135,7 +151,22 @@ class PaperBananaPipeline:
             prompt_dir=prompt_dir,
             output_dir=str(self._run_dir),
         )
-        self.critic = CriticAgent(self._vlm, prompt_dir=prompt_dir)
+
+        # Critic with optional visual analysis (agentic vision)
+        critic_vlm = self._vlm
+        if self.settings.critic_enable_visual_analysis and not self._demo_mode:
+            critic_vlm = ProviderRegistry.create_vlm(
+                Settings(
+                    vlm_provider="gemini",
+                    vlm_model=self.settings.critic_visual_analysis_model,
+                    google_api_key=self.settings.google_api_key,
+                )
+            )
+        self.critic = CriticAgent(
+            critic_vlm,
+            prompt_dir=prompt_dir,
+            enable_visual_analysis=self.settings.critic_enable_visual_analysis,
+        )
 
         logger.info(
             "Pipeline initialized",

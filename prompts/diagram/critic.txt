@@ -28,6 +28,11 @@ Your Description should primarily be modifications based on the original descrip
 - **Detailed Description**: {description}
 - **Target Diagram**: [The generated figure is provided as an image]
 
+## VISUAL ANALYSIS (Optional)
+{visual_analysis}
+
+Use this quantitative analysis (if provided) to inform your critique. If text errors were detected, include them in your suggestions. If layout balance is poor or contrast ratios are insufficient, suggest improvements.
+
 ## OUTPUT
 Provide your response strictly in the following JSON format:
 {{
