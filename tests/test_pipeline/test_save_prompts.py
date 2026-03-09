@@ -143,4 +143,3 @@ async def test_prompts_not_saved_when_disabled(tmp_path: Path):
 
     run_dir = _get_single_run_dir(out_dir)
     assert not (run_dir / "prompts").exists()
-

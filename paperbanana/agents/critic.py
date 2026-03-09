@@ -81,9 +81,7 @@ class CriticAgent(BaseAgent):
                     prompt=prompt,
                 )
             except Exception:
-                logger.warning(
-                    "Prompt recording failed", agent=self.agent_name, label=prompt_label
-                )
+                logger.warning("Prompt recording failed", agent=self.agent_name, label=prompt_label)
 
         logger.info("Running critic agent", image_path=image_path)
 

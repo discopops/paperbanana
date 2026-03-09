@@ -61,4 +61,3 @@ class PromptRecorder:
             raise
 
         return candidate
-
