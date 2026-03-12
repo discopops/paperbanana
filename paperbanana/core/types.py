@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class DiagramType(str, Enum):
@@ -32,6 +32,19 @@ class GenerationInput(BaseModel):
             "If None, uses provider default."
         ),
     )
+
+    _VALID_RATIOS = {"1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"}
+
+    @field_validator("aspect_ratio")
+    @classmethod
+    def validate_aspect_ratio(cls, v: Optional[str]) -> Optional[str]:
+        """Ensure aspect_ratio, when provided, is one of the supported values."""
+        if v is None:
+            return v
+        if v not in cls._VALID_RATIOS:
+            supported = ", ".join(sorted(cls._VALID_RATIOS))
+            raise ValueError(f"aspect_ratio must be one of: {supported}")
+        return v
 
 
 class ReferenceExample(BaseModel):
