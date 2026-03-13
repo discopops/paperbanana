@@ -88,28 +88,16 @@ class Settings(BaseSettings):
     output_dir: str = "outputs"
     output_format: OutputFormat = "png"
     save_iterations: bool = True
-
-    # Agentic Vision settings (NEW - opt-in)
-    planner_enable_reference_analysis: bool = False
-    planner_reference_analysis_model: str = "gemini-3-flash-preview"
-    critic_enable_visual_analysis: bool = False
-    critic_visual_analysis_model: str = "gemini-3-flash-preview"
-
-    # Input format settings
-    default_input_format: str = "auto"  # Auto-detect by default
-    pdf_extract_methodology: bool = True
-    pdf_use_vlm_extraction: bool = False  # Opt-in for VLM-based extraction
-
-    # Export format settings
-    default_export_formats: str = "png"  # Comma-separated
-    export_dpi: int = 300
-    export_quality: int = 95
+    save_prompts: bool = True
 
     # API Keys (loaded from environment)
     google_api_key: Optional[str] = Field(default=None, alias="GOOGLE_API_KEY")
     openrouter_api_key: Optional[str] = Field(default=None, alias="OPENROUTER_API_KEY")
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
     anthropic_api_key: Optional[str] = Field(default=None, alias="ANTHROPIC_API_KEY")
+    google_base_url: Optional[str] = Field(default=None, alias="GOOGLE_BASE_URL")
+    google_vlm_model: Optional[str] = Field(default=None, alias="GOOGLE_VLM_MODEL")
+    google_image_model: Optional[str] = Field(default=None, alias="GOOGLE_IMAGE_MODEL")
     openai_base_url: str = Field(default="https://api.openai.com/v1", alias="OPENAI_BASE_URL")
     openai_vlm_model: Optional[str] = Field(default=None, alias="OPENAI_VLM_MODEL")
     openai_image_model: Optional[str] = Field(default=None, alias="OPENAI_IMAGE_MODEL")
@@ -123,6 +111,8 @@ class Settings(BaseSettings):
     @property
     def effective_vlm_model(self) -> str:
         """Return the VLM model for the active provider."""
+        if self.vlm_provider == "gemini" and self.google_vlm_model:
+            return self.google_vlm_model
         if self.vlm_provider == "openai" and self.openai_vlm_model:
             return self.openai_vlm_model
         if self.vlm_provider == "bedrock" and self.bedrock_vlm_model:
@@ -132,6 +122,8 @@ class Settings(BaseSettings):
     @property
     def effective_image_model(self) -> str:
         """Return the image model for the active provider."""
+        if self.image_provider == "google_imagen" and self.google_image_model:
+            return self.google_image_model
         if self.image_provider == "openai_imagen" and self.openai_image_model:
             return self.openai_image_model
         if self.image_provider == "bedrock_imagen" and self.bedrock_image_model:
@@ -224,10 +216,7 @@ def _flatten_yaml(config: dict, prefix: str = "") -> dict:
         "output.dir": "output_dir",
         "output.format": "output_format",
         "output.save_iterations": "save_iterations",
-        "planner.enable_reference_analysis": "planner_enable_reference_analysis",
-        "planner.reference_analysis_model": "planner_reference_analysis_model",
-        "critic.enable_visual_analysis": "critic_enable_visual_analysis",
-        "critic.visual_analysis_model": "critic_visual_analysis_model",
+        "output.save_prompts": "save_prompts",
     }
 
     def _recurse(d: dict, prefix: str = "") -> None:
