@@ -197,6 +197,7 @@ paperbanana generate --continue-run run_20260218_125448_e7b876 \
 | `--format` | `-f` | Output format: `png`, `jpeg`, or `webp` (default: `png`) |
 | `--config` | | Path to YAML config file (see `configs/config.yaml`) |
 | `--verbose` | `-v` | Show detailed agent progress and timing |
+| `--progress-json` | | Emit JSON progress events to stdout during generation |
 
 ### `paperbanana plot` -- Statistical Plots
 
