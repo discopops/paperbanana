@@ -11,6 +11,7 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
+import json as json_mod
 
 from paperbanana.core.config import Settings
 from paperbanana.core.logging import configure_logging
@@ -157,6 +158,11 @@ def generate(
         None,
         "--seed",
         help="Random seed for reproducible image generation",
+    ),
+    progress_json: bool = typer.Option(
+        False,
+        "--progress-json",
+        help="Emit machine-readable JSON progress events to stdout during generation",
     ),
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Show detailed agent progress and timing"
@@ -370,15 +376,16 @@ def generate(
     else:
         iter_label = str(settings.refinement_iterations)
 
-    console.print(
-        Panel.fit(
-            f"[bold]PaperBanana[/bold] - Generating Methodology Diagram\n\n"
-            f"VLM: {settings.vlm_provider} / {settings.effective_vlm_model}\n"
-            f"Image: {settings.image_provider} / {settings.effective_image_model}\n"
-            f"Iterations: {iter_label}",
-            border_style="blue",
+    if not progress_json:
+        console.print(
+            Panel.fit(
+                f"[bold]PaperBanana[/bold] - Generating Methodology Diagram\n\n"
+                f"VLM: {settings.vlm_provider} / {settings.effective_vlm_model}\n"
+                f"Image: {settings.image_provider} / {settings.effective_image_model}\n"
+                f"Iterations: {iter_label}",
+                border_style="blue",
+            )
         )
-    )
 
     # Run pipeline
 
@@ -386,99 +393,113 @@ def generate(
     total_start = time.perf_counter()
 
     async def _run_with_progress():
-        pipeline = PaperBananaPipeline(settings=settings)
+        def _on_progress(event: str, payload: dict) -> None:
+            if progress_json:
+                console.print(
+                    json_mod.dumps({"event": event, **payload}),
+                    highlight=False,
+                )
+
+        pipeline = PaperBananaPipeline(
+            settings=settings,
+            progress_callback=_on_progress if progress_json else None,
+        )
 
         # Hint: show if using small built-in reference set
         ref_count = pipeline.reference_store.count
-        if ref_count <= 20 and not auto_download_data:
+        if ref_count <= 20 and not auto_download_data and not progress_json:
             console.print(
                 "  [dim]Using built-in reference set"
                 f" ({ref_count} examples). For better results:[/dim]"
             )
             console.print("  [dim]  paperbanana data download   # or --auto-download-data[/dim]")
-        # Patch agents to print step-by-step progress with timing
-        orig_optimizer_run = pipeline.optimizer.run
-        orig_retriever_run = pipeline.retriever.run
-        orig_planner_run = pipeline.planner.run
-        orig_stylist_run = pipeline.stylist.run
-        orig_visualizer_run = pipeline.visualizer.run
-        orig_critic_run = pipeline.critic.run
 
-        async def _optimizer_run(*a, **kw):
-            console.print("  [dim]●[/dim] Optimizing inputs (parallel)...", end="")
-            t = time.perf_counter()
-            result = await orig_optimizer_run(*a, **kw)
-            console.print(f" [green]✓[/green] [dim]{time.perf_counter() - t:.1f}s[/dim]")
-            return result
+        if not progress_json:
+            # Patch agents to print step-by-step progress with timing
+            orig_optimizer_run = pipeline.optimizer.run
+            orig_retriever_run = pipeline.retriever.run
+            orig_planner_run = pipeline.planner.run
+            orig_stylist_run = pipeline.stylist.run
+            orig_visualizer_run = pipeline.visualizer.run
+            orig_critic_run = pipeline.critic.run
 
-        async def _retriever_run(*a, **kw):
-            console.print("  [dim]●[/dim] Retrieving examples...", end="")
-            t = time.perf_counter()
-            result = await orig_retriever_run(*a, **kw)
-            console.print(
-                f" [green]✓[/green] [dim]{time.perf_counter() - t:.1f}s"
-                f" ({len(result)} examples)[/dim]"
-            )
-            return result
+            async def _optimizer_run(*a, **kw):
+                console.print("  [dim]●[/dim] Optimizing inputs (parallel)...", end="")
+                t = time.perf_counter()
+                result = await orig_optimizer_run(*a, **kw)
+                console.print(f" [green]✓[/green] [dim]{time.perf_counter() - t:.1f}s[/dim]")
+                return result
 
-        async def _planner_run(*a, **kw):
-            console.print("  [dim]●[/dim] Planning description...", end="")
-            t = time.perf_counter()
-            result = await orig_planner_run(*a, **kw)
-            desc, ratio = result
-            info = f"{len(desc)} chars"
-            if ratio:
-                info += f", ratio={ratio}"
-            elapsed = time.perf_counter() - t
-            console.print(f" [green]\u2713[/green] [dim]{elapsed:.1f}s ({info})[/dim]")
-            return result
+            async def _retriever_run(*a, **kw):
+                console.print("  [dim]●[/dim] Retrieving examples...", end="")
+                t = time.perf_counter()
+                result = await orig_retriever_run(*a, **kw)
+                console.print(
+                    f" [green]✓[/green] [dim]{time.perf_counter() - t:.1f}s"
+                    f" ({len(result)} examples)[/dim]"
+                )
+                return result
 
-        async def _stylist_run(*a, **kw):
-            console.print("  [dim]●[/dim] Styling description...", end="")
-            t = time.perf_counter()
-            result = await orig_stylist_run(*a, **kw)
-            console.print(f" [green]✓[/green] [dim]{time.perf_counter() - t:.1f}s[/dim]")
-            return result
+            async def _planner_run(*a, **kw):
+                console.print("  [dim]●[/dim] Planning description...", end="")
+                t = time.perf_counter()
+                result = await orig_planner_run(*a, **kw)
+                desc, ratio = result
+                info = f"{len(desc)} chars"
+                if ratio:
+                    info += f", ratio={ratio}"
+                elapsed = time.perf_counter() - t
+                console.print(f" [green]\u2713[/green] [dim]{elapsed:.1f}s ({info})[/dim]")
+                return result
 
-        async def _visualizer_run(*a, **kw):
-            iteration = kw.get("iteration", "")
-            total = (
-                settings.max_iterations if settings.auto_refine else settings.refinement_iterations
-            )
-            label = f"{iteration}/{total}"
-            if settings.auto_refine:
-                label += " (auto)"
-            if iteration == 1:
-                console.print("[bold]Phase 2[/bold] — Iterative Refinement")
-            console.print(f"  [dim]●[/dim] Generating image [{label}]...", end="")
-            t = time.perf_counter()
-            result = await orig_visualizer_run(*a, **kw)
-            console.print(f" [green]✓[/green] [dim]{time.perf_counter() - t:.1f}s[/dim]")
-            return result
+            async def _stylist_run(*a, **kw):
+                console.print("  [dim]●[/dim] Styling description...", end="")
+                t = time.perf_counter()
+                result = await orig_stylist_run(*a, **kw)
+                console.print(f" [green]✓[/green] [dim]{time.perf_counter() - t:.1f}s[/dim]")
+                return result
 
-        async def _critic_run(*a, **kw):
-            console.print("  [dim]●[/dim] Critic reviewing...", end="")
-            t = time.perf_counter()
-            result = await orig_critic_run(*a, **kw)
-            elapsed = time.perf_counter() - t
-            console.print(f" [green]✓[/green] [dim]{elapsed:.1f}s[/dim]")
-            if result.needs_revision:
-                for s in result.critic_suggestions[:3]:
-                    console.print(f"    [yellow]↻[/yellow] [dim]{s}[/dim]")
-            else:
-                console.print("    [green]✓[/green] [bold green]Critic satisfied[/bold green]")
-            return result
+            async def _visualizer_run(*a, **kw):
+                iteration = kw.get("iteration", "")
+                total = (
+                    settings.max_iterations
+                    if settings.auto_refine
+                    else settings.refinement_iterations
+                )
+                label = f"{iteration}/{total}"
+                if settings.auto_refine:
+                    label += " (auto)"
+                if iteration == 1:
+                    console.print("[bold]Phase 2[/bold] — Iterative Refinement")
+                console.print(f"  [dim]●[/dim] Generating image [{label}]...", end="")
+                t = time.perf_counter()
+                result = await orig_visualizer_run(*a, **kw)
+                console.print(f" [green]✓[/green] [dim]{time.perf_counter() - t:.1f}s[/dim]")
+                return result
 
-        pipeline.optimizer.run = _optimizer_run
-        pipeline.retriever.run = _retriever_run
-        pipeline.planner.run = _planner_run
-        pipeline.stylist.run = _stylist_run
-        pipeline.visualizer.run = _visualizer_run
-        pipeline.critic.run = _critic_run
+            async def _critic_run(*a, **kw):
+                console.print("  [dim]●[/dim] Critic reviewing...", end="")
+                t = time.perf_counter()
+                result = await orig_critic_run(*a, **kw)
+                elapsed = time.perf_counter() - t
+                console.print(f" [green]✓[/green] [dim]{elapsed:.1f}s[/dim]")
+                if result.needs_revision:
+                    for s in result.critic_suggestions[:3]:
+                        console.print(f"    [yellow]↻[/yellow] [dim]{s}[/dim]")
+                else:
+                    console.print("    [green]✓[/green] [bold green]Critic satisfied[/bold green]")
+                return result
 
-        if settings.optimize_inputs:
-            console.print("[bold]Phase 0[/bold] — Input Optimization")
-        console.print("[bold]Phase 1[/bold] — Planning")
+            pipeline.optimizer.run = _optimizer_run
+            pipeline.retriever.run = _retriever_run
+            pipeline.planner.run = _planner_run
+            pipeline.stylist.run = _stylist_run
+            pipeline.visualizer.run = _visualizer_run
+            pipeline.critic.run = _critic_run
+
+            if settings.optimize_inputs:
+                console.print("[bold]Phase 0[/bold] — Input Optimization")
+            console.print("[bold]Phase 1[/bold] — Planning")
 
         return await pipeline.generate(gen_input)
 
