@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json as json_mod
 import time
 from pathlib import Path
 from typing import Optional
@@ -162,6 +163,11 @@ def generate(
         None,
         "--seed",
         help="Random seed for reproducible image generation",
+    ),
+    progress_json: bool = typer.Option(
+        False,
+        "--progress-json",
+        help="Emit machine-readable JSON progress events to stdout during generation",
     ),
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Show detailed agent progress and timing"
@@ -384,15 +390,16 @@ def generate(
     else:
         iter_label = str(settings.refinement_iterations)
 
-    console.print(
-        Panel.fit(
-            f"[bold]PaperBanana[/bold] - Generating Methodology Diagram\n\n"
-            f"VLM: {settings.vlm_provider} / {settings.effective_vlm_model}\n"
-            f"Image: {settings.image_provider} / {settings.effective_image_model}\n"
-            f"Iterations: {iter_label}",
-            border_style="blue",
+    if not progress_json:
+        console.print(
+            Panel.fit(
+                f"[bold]PaperBanana[/bold] - Generating Methodology Diagram\n\n"
+                f"VLM: {settings.vlm_provider} / {settings.effective_vlm_model}\n"
+                f"Image: {settings.image_provider} / {settings.effective_image_model}\n"
+                f"Iterations: {iter_label}",
+                border_style="blue",
+            )
         )
-    )
 
     # Run pipeline
 
@@ -400,11 +407,21 @@ def generate(
     total_start = time.perf_counter()
 
     async def _run_with_progress():
-        pipeline = PaperBananaPipeline(settings=settings)
+        def _on_progress(event: str, payload: dict) -> None:
+            if progress_json:
+                console.print(
+                    json_mod.dumps({"event": event, **payload}),
+                    highlight=False,
+                )
+
+        pipeline = PaperBananaPipeline(
+            settings=settings,
+            progress_callback=_on_progress if progress_json else None,
+        )
 
         # Hint: show if using small built-in reference set
         ref_count = pipeline.reference_store.count
-        if ref_count <= 20 and not auto_download_data:
+        if ref_count <= 20 and not auto_download_data and not progress_json:
             console.print(
                 "  [dim]Using built-in reference set"
                 f" ({ref_count} examples). For better results:[/dim]"
@@ -482,7 +499,10 @@ def generate(
                 else:
                     console.print("    [green]✓[/green] [bold green]Critic satisfied[/bold green]")
 
-        return await pipeline.generate(gen_input, progress_callback=on_progress)
+        return await pipeline.generate(
+            gen_input,
+            progress_callback=on_progress if not progress_json else None,
+        )
 
     result = asyncio.run(_run_with_progress())
     total_elapsed = time.perf_counter() - total_start
