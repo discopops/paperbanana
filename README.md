@@ -317,6 +317,8 @@ result = asyncio.run(pipeline.generate(
 print(f"Output: {result.image_path}")
 ```
 
+**Progress callbacks:** `generate()` and `continue_run()` accept an optional `progress_callback` argument. The pipeline invokes it with `PipelineProgressEvent` objects (stage, message, seconds, iteration, extra) at each step (optimizer, retriever, planner, stylist, visualizer, critic), so you can show progress in UIs or log timing without patching agents.
+
 To continue a previous run:
 
 ```python

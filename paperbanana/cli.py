@@ -14,7 +14,12 @@ from rich.prompt import Prompt
 
 from paperbanana.core.config import Settings
 from paperbanana.core.logging import configure_logging
-from paperbanana.core.types import DiagramType, GenerationInput
+from paperbanana.core.types import (
+    DiagramType,
+    GenerationInput,
+    PipelineProgressEvent,
+    PipelineProgressStage,
+)
 from paperbanana.core.utils import generate_run_id
 
 app = typer.Typer(
@@ -275,41 +280,50 @@ def generate(
 
         console.print()
 
-        async def _run_continue():
-            pipeline = PaperBananaPipeline(settings=settings)
-
-            orig_visualizer_run = pipeline.visualizer.run
-            orig_critic_run = pipeline.critic.run
-
-            async def _visualizer_run(*a, **kw):
-                iteration = kw.get("iteration", "")
-                console.print(f"  [dim]●[/dim] Generating image (iter {iteration})...", end="")
-                t = time.perf_counter()
-                result = await orig_visualizer_run(*a, **kw)
-                console.print(f" [green]✓[/green] [dim]{time.perf_counter() - t:.1f}s[/dim]")
-                return result
-
-            async def _critic_run(*a, **kw):
+        def on_progress(event: PipelineProgressEvent) -> None:
+            if event.stage == PipelineProgressStage.VISUALIZER_START:
+                extra = event.extra or {}
+                total = extra.get("total_iterations", 0)
+                if event.iteration and total:
+                    label = f"{event.iteration}/{total}"
+                else:
+                    label = str(event.iteration or "")
+                if settings.auto_refine:
+                    label += " (auto)"
+                console.print(
+                    f"  [dim]●[/dim] Generating image (iter {event.iteration})...",
+                    end="",
+                )
+            elif event.stage == PipelineProgressStage.VISUALIZER_END:
+                console.print(
+                    f" [green]✓[/green] [dim]{event.seconds:.1f}s[/dim]"
+                    if event.seconds is not None
+                    else " [green]✓[/green]"
+                )
+            elif event.stage == PipelineProgressStage.CRITIC_START:
                 console.print("  [dim]●[/dim] Critic reviewing...", end="")
-                t = time.perf_counter()
-                result = await orig_critic_run(*a, **kw)
-                elapsed = time.perf_counter() - t
-                console.print(f" [green]✓[/green] [dim]{elapsed:.1f}s[/dim]")
-                if result.needs_revision:
+            elif event.stage == PipelineProgressStage.CRITIC_END:
+                console.print(
+                    f" [green]✓[/green] [dim]{event.seconds:.1f}s[/dim]"
+                    if event.seconds is not None
+                    else " [green]✓[/green]"
+                )
+                extra = event.extra or {}
+                if extra.get("needs_revision"):
                     console.print(
-                        f"    [yellow]↻[/yellow] Revision needed: [dim]{result.summary}[/dim]"
+                        "    [yellow]↻[/yellow] Revision needed: "
+                        f"[dim]{extra.get('summary', '')}[/dim]"
                     )
                 else:
                     console.print("    [green]✓[/green] [bold green]Critic satisfied[/bold green]")
-                return result
 
-            pipeline.visualizer.run = _visualizer_run
-            pipeline.critic.run = _critic_run
-
+        async def _run_continue():
+            pipeline = PaperBananaPipeline(settings=settings)
             return await pipeline.continue_run(
                 resume_state=resume_state,
                 additional_iterations=iterations,
                 user_feedback=feedback,
+                progress_callback=on_progress,
             )
 
         result = asyncio.run(_run_continue())
@@ -396,91 +410,79 @@ def generate(
                 f" ({ref_count} examples). For better results:[/dim]"
             )
             console.print("  [dim]  paperbanana data download   # or --auto-download-data[/dim]")
-        # Patch agents to print step-by-step progress with timing
-        orig_optimizer_run = pipeline.optimizer.run
-        orig_retriever_run = pipeline.retriever.run
-        orig_planner_run = pipeline.planner.run
-        orig_stylist_run = pipeline.stylist.run
-        orig_visualizer_run = pipeline.visualizer.run
-        orig_critic_run = pipeline.critic.run
 
-        async def _optimizer_run(*a, **kw):
-            console.print("  [dim]●[/dim] Optimizing inputs (parallel)...", end="")
-            t = time.perf_counter()
-            result = await orig_optimizer_run(*a, **kw)
-            console.print(f" [green]✓[/green] [dim]{time.perf_counter() - t:.1f}s[/dim]")
-            return result
+        def on_progress(event: PipelineProgressEvent) -> None:
+            if event.stage == PipelineProgressStage.OPTIMIZER_START:
+                console.print("[bold]Phase 0[/bold] — Input Optimization")
+                console.print("  [dim]●[/dim] Optimizing inputs (parallel)...", end="")
+            elif event.stage == PipelineProgressStage.OPTIMIZER_END:
+                console.print(
+                    f" [green]✓[/green] [dim]{event.seconds:.1f}s[/dim]"
+                    if event.seconds is not None
+                    else ""
+                )
+            elif event.stage == PipelineProgressStage.RETRIEVER_START:
+                console.print("[bold]Phase 1[/bold] — Planning")
+                console.print("  [dim]●[/dim] Retrieving examples...", end="")
+            elif event.stage == PipelineProgressStage.RETRIEVER_END:
+                extra = event.extra or {}
+                n = extra.get("examples_count", 0)
+                console.print(
+                    f" [green]✓[/green] [dim]{event.seconds:.1f}s ({n} examples)[/dim]"
+                    if event.seconds is not None
+                    else f" [green]✓[/green] [dim]({n} examples)[/dim]"
+                )
+            elif event.stage == PipelineProgressStage.PLANNER_START:
+                console.print("  [dim]●[/dim] Planning description...", end="")
+            elif event.stage == PipelineProgressStage.PLANNER_END:
+                extra = event.extra or {}
+                ratio = extra.get("recommended_ratio")
+                info = f"{event.seconds:.1f}s" if event.seconds is not None else ""
+                if ratio:
+                    info += f", ratio={ratio}"
+                console.print(f" [green]✓[/green] [dim]{info}[/dim]")
+            elif event.stage == PipelineProgressStage.STYLIST_START:
+                console.print("  [dim]●[/dim] Styling description...", end="")
+            elif event.stage == PipelineProgressStage.STYLIST_END:
+                console.print(
+                    f" [green]✓[/green] [dim]{event.seconds:.1f}s[/dim]"
+                    if event.seconds is not None
+                    else " [green]✓[/green]"
+                )
+            elif event.stage == PipelineProgressStage.VISUALIZER_START:
+                if event.iteration == 1:
+                    console.print("[bold]Phase 2[/bold] — Iterative Refinement")
+                extra = event.extra or {}
+                total = extra.get("total_iterations", 0)
+                if event.iteration and total:
+                    label = f"{event.iteration}/{total}"
+                else:
+                    label = str(event.iteration or "")
+                if settings.auto_refine:
+                    label += " (auto)"
+                console.print(f"  [dim]●[/dim] Generating image [{label}]...", end="")
+            elif event.stage == PipelineProgressStage.VISUALIZER_END:
+                console.print(
+                    f" [green]✓[/green] [dim]{event.seconds:.1f}s[/dim]"
+                    if event.seconds is not None
+                    else " [green]✓[/green]"
+                )
+            elif event.stage == PipelineProgressStage.CRITIC_START:
+                console.print("  [dim]●[/dim] Critic reviewing...", end="")
+            elif event.stage == PipelineProgressStage.CRITIC_END:
+                console.print(
+                    f" [green]✓[/green] [dim]{event.seconds:.1f}s[/dim]"
+                    if event.seconds is not None
+                    else " [green]✓[/green]"
+                )
+                extra = event.extra or {}
+                if extra.get("needs_revision"):
+                    for s in (extra.get("critic_suggestions") or [])[:3]:
+                        console.print(f"    [yellow]↻[/yellow] [dim]{s}[/dim]")
+                else:
+                    console.print("    [green]✓[/green] [bold green]Critic satisfied[/bold green]")
 
-        async def _retriever_run(*a, **kw):
-            console.print("  [dim]●[/dim] Retrieving examples...", end="")
-            t = time.perf_counter()
-            result = await orig_retriever_run(*a, **kw)
-            console.print(
-                f" [green]✓[/green] [dim]{time.perf_counter() - t:.1f}s"
-                f" ({len(result)} examples)[/dim]"
-            )
-            return result
-
-        async def _planner_run(*a, **kw):
-            console.print("  [dim]●[/dim] Planning description...", end="")
-            t = time.perf_counter()
-            result = await orig_planner_run(*a, **kw)
-            desc, ratio = result
-            info = f"{len(desc)} chars"
-            if ratio:
-                info += f", ratio={ratio}"
-            elapsed = time.perf_counter() - t
-            console.print(f" [green]\u2713[/green] [dim]{elapsed:.1f}s ({info})[/dim]")
-            return result
-
-        async def _stylist_run(*a, **kw):
-            console.print("  [dim]●[/dim] Styling description...", end="")
-            t = time.perf_counter()
-            result = await orig_stylist_run(*a, **kw)
-            console.print(f" [green]✓[/green] [dim]{time.perf_counter() - t:.1f}s[/dim]")
-            return result
-
-        async def _visualizer_run(*a, **kw):
-            iteration = kw.get("iteration", "")
-            total = (
-                settings.max_iterations if settings.auto_refine else settings.refinement_iterations
-            )
-            label = f"{iteration}/{total}"
-            if settings.auto_refine:
-                label += " (auto)"
-            if iteration == 1:
-                console.print("[bold]Phase 2[/bold] — Iterative Refinement")
-            console.print(f"  [dim]●[/dim] Generating image [{label}]...", end="")
-            t = time.perf_counter()
-            result = await orig_visualizer_run(*a, **kw)
-            console.print(f" [green]✓[/green] [dim]{time.perf_counter() - t:.1f}s[/dim]")
-            return result
-
-        async def _critic_run(*a, **kw):
-            console.print("  [dim]●[/dim] Critic reviewing...", end="")
-            t = time.perf_counter()
-            result = await orig_critic_run(*a, **kw)
-            elapsed = time.perf_counter() - t
-            console.print(f" [green]✓[/green] [dim]{elapsed:.1f}s[/dim]")
-            if result.needs_revision:
-                for s in result.critic_suggestions[:3]:
-                    console.print(f"    [yellow]↻[/yellow] [dim]{s}[/dim]")
-            else:
-                console.print("    [green]✓[/green] [bold green]Critic satisfied[/bold green]")
-            return result
-
-        pipeline.optimizer.run = _optimizer_run
-        pipeline.retriever.run = _retriever_run
-        pipeline.planner.run = _planner_run
-        pipeline.stylist.run = _stylist_run
-        pipeline.visualizer.run = _visualizer_run
-        pipeline.critic.run = _critic_run
-
-        if settings.optimize_inputs:
-            console.print("[bold]Phase 0[/bold] — Input Optimization")
-        console.print("[bold]Phase 1[/bold] — Planning")
-
-        return await pipeline.generate(gen_input)
+        return await pipeline.generate(gen_input, progress_callback=on_progress)
 
     result = asyncio.run(_run_with_progress())
     total_elapsed = time.perf_counter() - total_start
@@ -1157,11 +1159,20 @@ def benchmark(
         "png", "--format", "-f", help="Output image format (png, jpeg, webp)"
     ),
     seed: Optional[int] = typer.Option(None, "--seed", help="Random seed for reproducibility"),
+    concurrency: int = typer.Option(
+        1,
+        "--concurrency",
+        "-c",
+        help="Maximum number of benchmark entries to process in parallel",
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed progress"),
 ):
     """Run generation + evaluation across PaperBananaBench entries."""
     if image_format not in ("png", "jpeg", "webp"):
         console.print(f"[red]Error: Format must be png, jpeg, or webp. Got: {image_format}[/red]")
+        raise typer.Exit(1)
+    if concurrency < 1:
+        console.print("[red]Error: --concurrency must be at least 1[/red]")
         raise typer.Exit(1)
 
     configure_logging(verbose=verbose)
@@ -1170,7 +1181,7 @@ def benchmark(
 
     load_dotenv()
 
-    overrides: dict = {"output_format": image_format}
+    overrides: dict = {"output_format": image_format, "benchmark_concurrency": concurrency}
     if vlm_provider:
         overrides["vlm_provider"] = vlm_provider
     if vlm_model:

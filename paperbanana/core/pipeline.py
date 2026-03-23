@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import structlog
 
@@ -22,6 +22,8 @@ from paperbanana.core.types import (
     GenerationInput,
     GenerationOutput,
     IterationRecord,
+    PipelineProgressEvent,
+    PipelineProgressStage,
     ReferenceExample,
     RunMetadata,
 )
@@ -46,6 +48,19 @@ from paperbanana.reference.store import ReferenceStore
 logger = structlog.get_logger()
 
 _ssl_skip_applied = False
+
+
+def _emit_progress(
+    callback: Optional[Callable[[PipelineProgressEvent], None]],
+    event: PipelineProgressEvent,
+) -> None:
+    """Invoke progress callback if set; swallow errors so pipeline is not affected."""
+    if callback is None:
+        return
+    try:
+        callback(event)
+    except Exception:
+        logger.warning("Progress callback failed", stage=event.stage, exc_info=True)
 
 
 def _apply_ssl_skip():
@@ -231,7 +246,11 @@ class PaperBananaPipeline:
             return mapped, "external_only", [e.id for e in mapped]
         return mapped, "external_then_rerank", [e.id for e in mapped]
 
-    async def generate(self, input: GenerationInput) -> GenerationOutput:
+    async def generate(
+        self,
+        input: GenerationInput,
+        progress_callback: Optional[Callable[[PipelineProgressEvent], None]] = None,
+    ) -> GenerationOutput:
         """Run the full generation pipeline.
 
         Args:
@@ -273,6 +292,13 @@ class PaperBananaPipeline:
         optimize_seconds = 0.0
         if self.settings.optimize_inputs:
             logger.info("Phase 0: Optimizing inputs (parallel)")
+            _emit_progress(
+                progress_callback,
+                PipelineProgressEvent(
+                    stage=PipelineProgressStage.OPTIMIZER_START,
+                    message="Optimizing inputs (parallel)",
+                ),
+            )
             optimize_start = time.perf_counter()
             optimized = await self.optimizer.run(
                 source_context=input.source_context,
@@ -280,6 +306,14 @@ class PaperBananaPipeline:
                 diagram_type=input.diagram_type,
             )
             optimize_seconds = time.perf_counter() - optimize_start
+            _emit_progress(
+                progress_callback,
+                PipelineProgressEvent(
+                    stage=PipelineProgressStage.OPTIMIZER_END,
+                    message="Optimizer done",
+                    seconds=optimize_seconds,
+                ),
+            )
             logger.info(
                 "[Optimizer] done",
                 seconds=round(optimize_seconds, 1),
@@ -309,6 +343,13 @@ class PaperBananaPipeline:
 
         # Step 1: Retriever — find relevant examples (timer includes external call when enabled)
         logger.info("Phase 1: Retrieval")
+        _emit_progress(
+            progress_callback,
+            PipelineProgressEvent(
+                stage=PipelineProgressStage.RETRIEVER_START,
+                message="Retrieving examples",
+            ),
+        )
         retrieval_start = time.perf_counter()
         candidates = self.reference_store.get_all()
         (
@@ -327,6 +368,15 @@ class PaperBananaPipeline:
                 diagram_type=input.diagram_type,
             )
         retrieval_seconds = time.perf_counter() - retrieval_start
+        _emit_progress(
+            progress_callback,
+            PipelineProgressEvent(
+                stage=PipelineProgressStage.RETRIEVER_END,
+                message="Retriever done",
+                seconds=retrieval_seconds,
+                extra={"examples_count": len(examples), "retrieval_mode": retrieval_mode},
+            ),
+        )
         logger.info(
             "[Retriever] done",
             seconds=round(retrieval_seconds, 1),
@@ -336,6 +386,13 @@ class PaperBananaPipeline:
 
         # Step 2: Planner — generate textual description
         logger.info("Phase 1: Planning")
+        _emit_progress(
+            progress_callback,
+            PipelineProgressEvent(
+                stage=PipelineProgressStage.PLANNER_START,
+                message="Planning description",
+            ),
+        )
         planning_start = time.perf_counter()
         description, planner_ratio = await self.planner.run(
             source_context=input.source_context,
@@ -345,14 +402,25 @@ class PaperBananaPipeline:
             supported_ratios=getattr(self.visualizer.image_gen, "supported_ratios", None),
         )
         planning_seconds = time.perf_counter() - planning_start
-        logger.info(
-            "[Planner] done",
-            seconds=round(planning_seconds, 1),
-            recommended_ratio=planner_ratio,
+        _emit_progress(
+            progress_callback,
+            PipelineProgressEvent(
+                stage=PipelineProgressStage.PLANNER_END,
+                message="Planner done",
+                seconds=planning_seconds,
+                extra={"recommended_ratio": planner_ratio},
+            ),
         )
 
         # Step 3: Stylist — optimize description aesthetics
         logger.info("Phase 1: Styling")
+        _emit_progress(
+            progress_callback,
+            PipelineProgressEvent(
+                stage=PipelineProgressStage.STYLIST_START,
+                message="Styling description",
+            ),
+        )
         styling_start = time.perf_counter()
         optimized_description = await self.stylist.run(
             description=description,
@@ -362,9 +430,13 @@ class PaperBananaPipeline:
             diagram_type=input.diagram_type,
         )
         styling_seconds = time.perf_counter() - styling_start
-        logger.info(
-            "[Stylist] done",
-            seconds=round(styling_seconds, 1),
+        _emit_progress(
+            progress_callback,
+            PipelineProgressEvent(
+                stage=PipelineProgressStage.STYLIST_END,
+                message="Stylist done",
+                seconds=styling_seconds,
+            ),
         )
 
         # Save planning outputs
@@ -406,6 +478,15 @@ class PaperBananaPipeline:
             )
 
             # Step 4: Visualizer — generate image
+            _emit_progress(
+                progress_callback,
+                PipelineProgressEvent(
+                    stage=PipelineProgressStage.VISUALIZER_START,
+                    message=f"Generating image (iteration {i + 1}/{total_iters})",
+                    iteration=i + 1,
+                    extra={"total_iterations": total_iters},
+                ),
+            )
             visualizer_start = time.perf_counter()
             image_path = await self.visualizer.run(
                 description=current_description,
@@ -416,12 +497,29 @@ class PaperBananaPipeline:
                 aspect_ratio=effective_ratio,
             )
             visualizer_seconds = time.perf_counter() - visualizer_start
+            _emit_progress(
+                progress_callback,
+                PipelineProgressEvent(
+                    stage=PipelineProgressStage.VISUALIZER_END,
+                    message=f"Visualizer iteration {i + 1} done",
+                    seconds=visualizer_seconds,
+                    iteration=i + 1,
+                ),
+            )
             logger.info(
                 f"[Visualizer] Iteration {i + 1}/{total_iters} done",
                 seconds=round(visualizer_seconds, 1),
             )
 
             # Step 5: Critic — evaluate and provide feedback
+            _emit_progress(
+                progress_callback,
+                PipelineProgressEvent(
+                    stage=PipelineProgressStage.CRITIC_START,
+                    message="Critic reviewing",
+                    iteration=i + 1,
+                ),
+            )
             critic_start = time.perf_counter()
             critique = await self.critic.run(
                 image_path=image_path,
@@ -431,10 +529,19 @@ class PaperBananaPipeline:
                 diagram_type=input.diagram_type,
             )
             critic_seconds = time.perf_counter() - critic_start
-            logger.info(
-                "[Critic] done",
-                seconds=round(critic_seconds, 1),
-                needs_revision=critique.needs_revision,
+            _emit_progress(
+                progress_callback,
+                PipelineProgressEvent(
+                    stage=PipelineProgressStage.CRITIC_END,
+                    message="Critic done",
+                    seconds=critic_seconds,
+                    iteration=i + 1,
+                    extra={
+                        "needs_revision": critique.needs_revision,
+                        "summary": critique.summary,
+                        "critic_suggestions": critique.critic_suggestions[:3],
+                    },
+                ),
             )
 
             iteration_record = IterationRecord(
@@ -551,6 +658,7 @@ class PaperBananaPipeline:
         resume_state,
         additional_iterations: Optional[int] = None,
         user_feedback: Optional[str] = None,
+        progress_callback: Optional[Callable[[PipelineProgressEvent], None]] = None,
     ) -> GenerationOutput:
         """Continue a previous run with more iterations.
 
@@ -595,6 +703,15 @@ class PaperBananaPipeline:
             )
 
             # Visualizer — generate image
+            _emit_progress(
+                progress_callback,
+                PipelineProgressEvent(
+                    stage=PipelineProgressStage.VISUALIZER_START,
+                    message=f"Generating image (iteration {iter_num})",
+                    iteration=iter_num,
+                    extra={"total_iterations": total_iters},
+                ),
+            )
             visualizer_start = time.perf_counter()
             image_path = await self.visualizer.run(
                 description=current_description,
@@ -605,12 +722,29 @@ class PaperBananaPipeline:
                 aspect_ratio=resume_state.aspect_ratio,
             )
             visualizer_seconds = time.perf_counter() - visualizer_start
+            _emit_progress(
+                progress_callback,
+                PipelineProgressEvent(
+                    stage=PipelineProgressStage.VISUALIZER_END,
+                    message=f"Visualizer iteration {iter_num} done",
+                    seconds=visualizer_seconds,
+                    iteration=iter_num,
+                ),
+            )
             logger.info(
                 f"[Visualizer] Iteration {iter_num} done",
                 seconds=round(visualizer_seconds, 1),
             )
 
             # Critic — evaluate with optional user feedback
+            _emit_progress(
+                progress_callback,
+                PipelineProgressEvent(
+                    stage=PipelineProgressStage.CRITIC_START,
+                    message="Critic reviewing",
+                    iteration=iter_num,
+                ),
+            )
             critic_start = time.perf_counter()
             critique = await self.critic.run(
                 image_path=image_path,
@@ -621,6 +755,20 @@ class PaperBananaPipeline:
                 user_feedback=user_feedback,
             )
             critic_seconds = time.perf_counter() - critic_start
+            _emit_progress(
+                progress_callback,
+                PipelineProgressEvent(
+                    stage=PipelineProgressStage.CRITIC_END,
+                    message="Critic done",
+                    seconds=critic_seconds,
+                    iteration=iter_num,
+                    extra={
+                        "needs_revision": critique.needs_revision,
+                        "summary": critique.summary,
+                        "critic_suggestions": critique.critic_suggestions[:3],
+                    },
+                ),
+            )
             logger.info(
                 "[Critic] done",
                 seconds=round(critic_seconds, 1),
