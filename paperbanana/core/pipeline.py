@@ -192,12 +192,13 @@ class PaperBananaPipeline:
         Events are best-effort: any callback error is logged and ignored so that
         progress consumers cannot break the main pipeline.
         """
-        logger.info("progress_event", event=event, **payload)
+        # structlog reserves "event" for the log message; use a distinct key.
+        logger.info("progress_event", progress_event=event, **payload)
         if self._progress_callback is not None:
             try:
                 self._progress_callback(event, payload)
             except Exception:
-                logger.warning("Progress callback raised", event=event)
+                logger.warning("Progress callback raised", progress_event=event)
 
     @property
     def _run_dir(self) -> Path:
