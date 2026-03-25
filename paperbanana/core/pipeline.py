@@ -222,7 +222,9 @@ class PaperBananaPipeline:
         return ensure_dir(Path(self.settings.output_dir) / self.run_id)
 
     def _find_prompt_dir(self) -> str:
-        """Find the prompts directory relative to the package."""
+        """Find the prompts directory, preferring settings.prompt_dir if set."""
+        if self.settings.prompt_dir:
+            return self.settings.prompt_dir
         return find_prompt_dir()
 
     async def _resolve_retrieval_candidates(

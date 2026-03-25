@@ -90,6 +90,12 @@ class Settings(BaseSettings):
     save_iterations: bool = True
     save_prompts: bool = True
 
+    # Prompt settings
+    prompt_dir: Optional[str] = None
+
+    # Benchmark settings
+    benchmark_concurrency: int = 1
+
     # API Keys (loaded from environment)
     google_api_key: Optional[str] = Field(default=None, alias="GOOGLE_API_KEY")
     openrouter_api_key: Optional[str] = Field(default=None, alias="OPENROUTER_API_KEY")
@@ -217,6 +223,7 @@ def _flatten_yaml(config: dict, prefix: str = "") -> dict:
         "output.format": "output_format",
         "output.save_iterations": "save_iterations",
         "output.save_prompts": "save_prompts",
+        "pipeline.prompt_dir": "prompt_dir",
     }
 
     def _recurse(d: dict, prefix: str = "") -> None:

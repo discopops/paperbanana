@@ -162,6 +162,11 @@ def generate(
         "--exemplar-retries",
         help="Retry attempts for external exemplar retrieval on transient errors",
     ),
+    prompt_dir: Optional[str] = typer.Option(
+        None,
+        "--prompt-dir",
+        help="Path to alternative prompt templates directory (for A/B testing)",
+    ),
     seed: Optional[int] = typer.Option(
         None,
         "--seed",
@@ -239,6 +244,8 @@ def generate(
         overrides["exemplar_retrieval_max_retries"] = exemplar_retries
     if seed is not None:
         overrides["seed"] = seed
+    if prompt_dir:
+        overrides["prompt_dir"] = prompt_dir
 
     if config:
         settings = Settings.from_yaml(config, **overrides)
@@ -1241,6 +1248,145 @@ def ablate_retrieval(
     )
 
 
+@app.command("ablate-prompts")
+def ablate_prompts(
+    variant_prompt_dir: str = typer.Option(
+        ..., "--variant-dir", help="Path to the variant prompt templates directory"
+    ),
+    baseline_prompt_dir: Optional[str] = typer.Option(
+        None, "--baseline-dir", help="Path to baseline prompt templates (default: built-in prompts)"
+    ),
+    variant_name: str = typer.Option("variant", "--variant-name", help="Label for the variant"),
+    baseline_name: str = typer.Option("baseline", "--baseline-name", help="Label for the baseline"),
+    category: Optional[str] = typer.Option(
+        None, "--category", help="Only run entries in this category"
+    ),
+    ids: Optional[str] = typer.Option(None, "--ids", help="Comma-separated entry IDs to compare"),
+    limit: Optional[int] = typer.Option(None, "--limit", help="Max entries to compare"),
+    seed: Optional[int] = typer.Option(None, "--seed", help="Random seed for reproducibility"),
+    output_report: Optional[str] = typer.Option(
+        None, "--output-report", "-o", help="Output JSON report path"
+    ),
+    config: Optional[str] = typer.Option(None, "--config", help="Path to config YAML file"),
+    vlm_provider: Optional[str] = typer.Option(None, "--vlm-provider", help="VLM provider"),
+    image_provider: Optional[str] = typer.Option(
+        None, "--image-provider", help="Image generation provider"
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed progress"),
+):
+    """Run A/B comparison of two prompt configurations and produce a scored report."""
+    configure_logging(verbose=verbose)
+
+    from dotenv import load_dotenv
+
+    load_dotenv()
+
+    overrides: dict = {}
+    if vlm_provider:
+        overrides["vlm_provider"] = vlm_provider
+    if image_provider:
+        overrides["image_provider"] = image_provider
+    if seed is not None:
+        overrides["seed"] = seed
+
+    if config:
+        settings = Settings.from_yaml(config, **overrides)
+    else:
+        settings = Settings(**overrides)
+
+    from paperbanana.evaluation.benchmark import filter_examples
+    from paperbanana.evaluation.prompt_ablation import (
+        PromptAblationRunner,
+        validate_prompt_dir,
+    )
+    from paperbanana.reference.store import ReferenceStore
+
+    try:
+        validate_prompt_dir(variant_prompt_dir)
+    except ValueError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+    if baseline_prompt_dir:
+        try:
+            validate_prompt_dir(baseline_prompt_dir)
+        except ValueError as e:
+            console.print(f"[red]Error: {e}[/red]")
+            raise typer.Exit(1)
+
+    runner = PromptAblationRunner(
+        settings,
+        baseline_prompt_dir=baseline_prompt_dir,
+        variant_prompt_dir=variant_prompt_dir,
+        baseline_name=baseline_name,
+        variant_name=variant_name,
+    )
+
+    id_list = [s.strip() for s in ids.split(",") if s.strip()] if ids else None
+    try:
+        store = ReferenceStore.from_settings(settings)
+        examples = store.get_all()
+        if not examples:
+            raise ValueError("No benchmark entries found. Run 'paperbanana data download' first.")
+        entries = filter_examples(examples, category=category, ids=id_list, limit=limit)
+    except ValueError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+    if not entries:
+        console.print("[red]Error: No entries match the given filters.[/red]")
+        raise typer.Exit(1)
+
+    console.print(
+        Panel.fit(
+            f"[bold]PaperBanana[/bold] — Prompt A/B Comparison\n\n"
+            f"Baseline: {runner.baseline_prompt_dir} ({baseline_name})\n"
+            f"Variant:  {variant_prompt_dir} ({variant_name})\n"
+            f"Entries:  {len(entries)}\n"
+            f"Seed:     {settings.seed or 'none'}",
+            border_style="magenta",
+        )
+    )
+
+    report = asyncio.run(runner.run(entries))
+
+    default_path = Path(settings.output_dir) / f"prompt_ablation_{generate_run_id()}.json"
+    report_path = Path(output_report) if output_report else default_path
+    saved_path = PromptAblationRunner.save_report(report, report_path)
+
+    summary = report.summary
+    if not summary:
+        console.print("[yellow]No entries were successfully scored.[/yellow]")
+        console.print(f"\nReport: [bold]{saved_path}[/bold]")
+        return
+
+    # Display results
+    deltas = summary.get("mean_dimension_deltas", {})
+    delta_lines = []
+    for dim, delta in deltas.items():
+        sign = "+" if delta > 0 else ""
+        delta_lines.append(f"  {dim.capitalize():14s} {sign}{delta}")
+
+    console.print(
+        Panel.fit(
+            "[bold]Prompt Ablation Summary[/bold]\n\n"
+            f"Scored:           {summary.get('scored', 0)}\n"
+            f"Variant wins:     {summary.get('variant_wins', 0)}  "
+            f"({summary.get('variant_win_rate', 0)}%)\n"
+            f"Baseline wins:    {summary.get('baseline_wins', 0)}  "
+            f"({summary.get('baseline_win_rate', 0)}%)\n"
+            f"Ties:             {summary.get('ties', 0)}\n\n"
+            f"Mean baseline:    {summary.get('mean_baseline_score', 0)}/100\n"
+            f"Mean variant:     {summary.get('mean_variant_score', 0)}/100\n"
+            f"Mean delta:       {summary.get('mean_overall_delta', 0):+.1f}\n\n"
+            "[bold]Per-dimension deltas (variant - baseline):[/bold]\n" + "\n".join(delta_lines),
+            border_style="cyan",
+        )
+    )
+
+    console.print(f"\nReport: [bold]{saved_path}[/bold]")
+
+
 @app.command()
 def benchmark(
     config: Optional[str] = typer.Option(None, "--config", help="Path to config YAML file"),
@@ -1274,6 +1420,11 @@ def benchmark(
         "png", "--format", "-f", help="Output image format (png, jpeg, webp)"
     ),
     seed: Optional[int] = typer.Option(None, "--seed", help="Random seed for reproducibility"),
+    prompt_dir: Optional[str] = typer.Option(
+        None,
+        "--prompt-dir",
+        help="Path to alternative prompt templates directory",
+    ),
     concurrency: int = typer.Option(
         1,
         "--concurrency",
@@ -1315,6 +1466,8 @@ def benchmark(
         overrides["output_dir"] = output_dir
     if seed is not None:
         overrides["seed"] = seed
+    if prompt_dir:
+        overrides["prompt_dir"] = prompt_dir
 
     if config:
         settings = Settings.from_yaml(config, **overrides)
