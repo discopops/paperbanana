@@ -13,7 +13,10 @@ _AVG_TOKENS: dict[str, tuple[int, int]] = {
     "retriever": (3000, 500),
     "planner": (6000, 2000),
     "stylist": (3000, 2000),
-    "visualizer_vlm": (2000, 2000),  # for statistical plots (matplotlib code gen)
+    "visualizer_vlm": (
+        2000,
+        2000,
+    ),  # for statistical plots (matplotlib code gen)
     "critic": (4000, 1500),
 }
 
@@ -52,7 +55,10 @@ def estimate_cost(
         if vlm_pricing is None:
             return 0.0
         inp, out = _AVG_TOKENS.get(agent, (3000, 1500))
-        return inp * vlm_pricing["input_per_1k"] / 1000 + out * vlm_pricing["output_per_1k"] / 1000
+        return (
+            inp * vlm_pricing["input_per_1k"] / 1000
+            + out * vlm_pricing["output_per_1k"] / 1000
+        )
 
     def _image_cost() -> float:
         nonlocal image_calls
@@ -87,7 +93,9 @@ def estimate_cost(
     if vlm_pricing is None:
         notes.append(f"VLM pricing unknown for {vlm_provider}/{vlm_model}")
     if image_pricing is None:
-        notes.append(f"Image pricing unknown for {image_provider}/{image_model}")
+        notes.append(
+            f"Image pricing unknown for {image_provider}/{image_model}"
+        )
     if settings.auto_refine:
         notes.append(
             f"Auto-refine: estimated for max {iterations} iterations; "

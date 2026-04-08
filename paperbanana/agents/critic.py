@@ -24,15 +24,20 @@ class CriticAgent(BaseAgent):
     """
 
     def __init__(
-        self, vlm_provider: VLMProvider, prompt_dir: str = "prompts", prompt_recorder=None
+        self,
+        vlm_provider: VLMProvider,
+        prompt_dir: str = "prompts",
+        prompt_recorder=None,
     ):
-        super().__init__(vlm_provider, prompt_dir, prompt_recorder=prompt_recorder)
+        super().__init__(
+            vlm_provider, prompt_dir, prompt_recorder=prompt_recorder
+        )
 
     @property
     def agent_name(self) -> str:
         return "critic"
 
-    async def run(
+    async def run(  # type: ignore[override]
         self,
         image_path: str,
         description: str,
@@ -57,9 +62,13 @@ class CriticAgent(BaseAgent):
         # Load the image
         image = load_image(image_path)
 
-        prompt_type = "diagram" if diagram_type == DiagramType.METHODOLOGY else "plot"
+        prompt_type = (
+            "diagram" if diagram_type == DiagramType.METHODOLOGY else "plot"
+        )
         template = self.load_prompt(prompt_type)
-        prompt_label = self._prompt_label_from_image_path(image_path) or "critic"
+        prompt_label = (
+            self._prompt_label_from_image_path(image_path) or "critic"
+        )
         # Build prompt manually so we record once after appending user_feedback.
         prompt = template.format(
             source_context=source_context,
@@ -68,9 +77,7 @@ class CriticAgent(BaseAgent):
         )
 
         if user_feedback:
-            prompt += (
-                f"\n\nAdditional user feedback to consider in your evaluation:\n{user_feedback}"
-            )
+            prompt += f"\n\nAdditional user feedback to consider in your evaluation:\n{user_feedback}"
 
         # Record the exact prompt sent to the model (including user_feedback in continue-run flows)
         if self._prompt_recorder is not None:
@@ -81,7 +88,11 @@ class CriticAgent(BaseAgent):
                     prompt=prompt,
                 )
             except Exception:
-                logger.warning("Prompt recording failed", agent=self.agent_name, label=prompt_label)
+                logger.warning(
+                    "Prompt recording failed",
+                    agent=self.agent_name,
+                    label=prompt_label,
+                )
 
         logger.info("Running critic agent", image_path=image_path)
 

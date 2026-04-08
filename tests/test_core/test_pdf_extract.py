@@ -8,8 +8,10 @@ import pytest
 
 pytest.importorskip("fitz", reason="PyMuPDF not installed")
 
-from paperbanana.core.pdf_text import extract_text_from_pdf
-from paperbanana.core.source_loader import load_methodology_source
+from paperbanana.core.pdf_text import extract_text_from_pdf  # noqa: E402
+from paperbanana.core.source_loader import (
+    load_methodology_source,
+)  # noqa: E402
 
 
 def test_extract_text_from_pdf(tmp_path: Path) -> None:

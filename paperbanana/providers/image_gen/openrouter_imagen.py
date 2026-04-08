@@ -1,11 +1,11 @@
-"""OpenRouter image generation provider — uses any image model via the OpenAI-compatible API."""
+"""OpenRouter image generation provider — uses any image model via the OpenAI-compatible API."""  # noqa: E501
 
 from __future__ import annotations
 
 import base64
 import re
 from io import BytesIO
-from typing import Optional
+from typing import Any, Optional
 
 import structlog
 from PIL import Image
@@ -52,7 +52,7 @@ class OpenRouterImageGen(ImageGenProvider):
                 base_url="https://openrouter.ai/api/v1",
                 headers={
                     "Authorization": f"Bearer {self._api_key}",
-                    "HTTP-Referer": "https://github.com/llmsresearch/paperbanana",
+                    "HTTP-Referer": "https://github.com/llmsresearch/paperbanana",  # noqa: E501
                     "X-Title": "PaperBanana",
                 },
                 # Image generation can take a while
@@ -69,7 +69,7 @@ class OpenRouterImageGen(ImageGenProvider):
         return ["1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"]
 
     def _aspect_ratio_hint(self, width: int, height: int) -> str:
-        """Turn pixel dimensions into a human-readable aspect ratio hint for the prompt."""
+        """Turn pixel dimensions into a human-readable aspect ratio hint for the prompt."""  # noqa: E501
         ratio = width / height
         if ratio > 1.5:
             return "wide landscape format (16:9)"
@@ -93,7 +93,7 @@ class OpenRouterImageGen(ImageGenProvider):
     ) -> Image.Image:
         client = self._get_client()
 
-        # OpenRouter doesn't have native aspect-ratio params like the Google SDK,
+        # OpenRouter doesn't have native aspect-ratio params like the Google SDK,  # noqa: E501
         # so we bake the desired format into the prompt itself.
         if aspect_ratio:
             aspect_hint = f"{aspect_ratio} format"
@@ -103,7 +103,7 @@ class OpenRouterImageGen(ImageGenProvider):
         if negative_prompt:
             full_prompt += f"\n\nAvoid: {negative_prompt}"
 
-        payload = {
+        payload: dict[str, Any] = {
             "model": self._model,
             "messages": [
                 {"role": "user", "content": full_prompt},
@@ -130,21 +130,27 @@ class OpenRouterImageGen(ImageGenProvider):
                     b64_data = url.split(",", 1)[1]
                     image_bytes = base64.b64decode(b64_data)
                     if self.cost_tracker is not None:
-                        self.cost_tracker.record_image_call(provider=self.name, model=self._model)
+                        self.cost_tracker.record_image_call(
+                            provider=self.name, model=self._model
+                        )
                     return Image.open(BytesIO(image_bytes))
 
-        # Fallback: some models inline the base64 data directly in the text content
+        # Fallback: some models inline the base64 data directly in the text content  # noqa: E501
         content = message.get("content", "")
         if "data:image/" in content:
-            match = re.search(r"data:image/[^;]+;base64,([A-Za-z0-9+/=]+)", content)
+            match = re.search(
+                r"data:image/[^;]+;base64,([A-Za-z0-9+/=]+)", content
+            )
             if match:
                 image_bytes = base64.b64decode(match.group(1))
                 if self.cost_tracker is not None:
-                    self.cost_tracker.record_image_call(provider=self.name, model=self._model)
+                    self.cost_tracker.record_image_call(
+                        provider=self.name, model=self._model
+                    )
                 return Image.open(BytesIO(image_bytes))
 
         logger.error("No image data in OpenRouter response", model=self._model)
         raise ValueError(
-            f"OpenRouter response for {self._model} did not contain image data. "
+            f"OpenRouter response for {self._model} did not contain image data. "  # noqa: E501
             f"Content preview: {content[:200]}"
         )

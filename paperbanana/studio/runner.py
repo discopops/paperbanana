@@ -34,7 +34,13 @@ from paperbanana.core.utils import ensure_dir, find_prompt_dir
 from paperbanana.evaluation.judge import VLMJudge
 from paperbanana.providers.registry import ProviderRegistry
 
-VLM_PROVIDER_CHOICES = ["gemini", "openai", "openrouter", "bedrock", "anthropic"]
+VLM_PROVIDER_CHOICES = [
+    "gemini",
+    "openai",
+    "openrouter",
+    "bedrock",
+    "anthropic",
+]
 IMAGE_PROVIDER_CHOICES = [
     "google_imagen",
     "openai_imagen",
@@ -118,7 +124,7 @@ def build_settings(
 
 
 class ProgressLog:
-    """Collect human-readable lines from ``PipelineProgressEvent`` callbacks."""
+    """Collect human-readable lines from ``PipelineProgressEvent`` callbacks."""  # noqa: E501
 
     def __init__(self) -> None:
         self.lines: list[str] = []
@@ -190,7 +196,7 @@ def run_methodology(
     aspect_ratio_label: str,
     verbose_logging: bool = False,
 ) -> tuple[str, Optional[str], list[tuple[str, str]], str]:
-    """Run methodology diagram generation. Returns (log, final_path, gallery, error)."""
+    """Run methodology diagram generation. Returns (log, final_path, gallery, error)."""  # noqa: E501
     configure_logging(verbose=verbose_logging)
     log = ProgressLog()
     log.append("Starting methodology diagram pipeline…")
@@ -205,7 +211,9 @@ def run_methodology(
 
         async def _go():
             pipeline = PaperBananaPipeline(settings=settings)
-            return await pipeline.generate(gen_in, progress_callback=log.handler())
+            return await pipeline.generate(
+                gen_in, progress_callback=log.handler()
+            )
 
         result = asyncio.run(_go())
         log.append("")
@@ -258,7 +266,9 @@ def run_plot(
 
         async def _go():
             pipeline = PaperBananaPipeline(settings=settings)
-            return await pipeline.generate(gen_in, progress_callback=log.handler())
+            return await pipeline.generate(
+                gen_in, progress_callback=log.handler()
+            )
 
         result = asyncio.run(_go())
         log.append("")
@@ -327,7 +337,7 @@ def run_evaluate(
             if r.reasoning:
                 out_parts.append(f"{r.reasoning}\n\n")
         out_parts.append(
-            f"### Overall\n**{scores.overall_winner}** — score {scores.overall_score:.0f}\n"
+            f"### Overall\n**{scores.overall_winner}** — score {scores.overall_score:.0f}\n"  # noqa: E501
         )
         return "\n".join(lines), "".join(out_parts)
     except Exception as e:
@@ -416,7 +426,7 @@ def run_batch(
         return "\n".join(lines), msg
 
     is_resume = bool(resume_batch)
-    if is_resume:
+    if resume_batch:
         resume_ref = Path(resume_batch)
         if resume_ref.is_dir():
             batch_dir = resume_ref.resolve()
@@ -445,7 +455,9 @@ def run_batch(
     )
     planned = select_items_for_run(state, retry_failed=retry_failed)
     if not planned:
-        checkpoint_progress(batch_dir=batch_dir, state=state, mark_complete=True)
+        checkpoint_progress(
+            batch_dir=batch_dir, state=state, mark_complete=True
+        )
         lines.append("Nothing to run: all items already completed.")
         lines.append(f"Report written: {batch_dir / 'batch_report.json'}")
         return "\n".join(lines), str(batch_dir.resolve())
@@ -469,9 +481,13 @@ def run_batch(
                     checkpoint_progress(batch_dir=batch_dir, state=state)
                     input_path = Path(item["input"])
                     if not input_path.is_file():
-                        mark_item_failure(state, item_key, "input file not found")
+                        mark_item_failure(
+                            state, item_key, "input file not found"
+                        )
                         checkpoint_progress(batch_dir=batch_dir, state=state)
-                        lines.append(f"  error: input not found ({input_path})")
+                        lines.append(
+                            f"  error: input not found ({input_path})"
+                        )
                         return
                     try:
                         source_context = load_methodology_source(
@@ -482,7 +498,9 @@ def run_batch(
                             communicative_intent=item["caption"],
                             diagram_type=DiagramType.METHODOLOGY,
                         )
-                        result = await PaperBananaPipeline(settings=settings).generate(gen_in)
+                        result = await PaperBananaPipeline(
+                            settings=settings
+                        ).generate(gen_in)
                         mark_item_success(
                             state,
                             item_key,
@@ -497,16 +515,22 @@ def run_batch(
                         mark_item_failure(state, item_key, str(e))
                         checkpoint_progress(batch_dir=batch_dir, state=state)
                         if attempt < max_retries:
-                            lines.append(f"  retry {attempt + 1}/{max_retries}: {e}")
+                            lines.append(
+                                f"  retry {attempt + 1}/{max_retries}: {e}"
+                            )
                             continue
                         lines.append(f"  error: {e}")
                         return
 
-        await asyncio.gather(*[_run_one(idx, item) for idx, item, _ in planned])
+        await asyncio.gather(
+            *[_run_one(idx, item) for idx, item, _ in planned]
+        )
 
     asyncio.run(_run_all_items())
 
-    report = checkpoint_progress(batch_dir=batch_dir, state=state, mark_complete=True)
+    report = checkpoint_progress(
+        batch_dir=batch_dir, state=state, mark_complete=True
+    )
     report_path = batch_dir / "batch_report.json"
     lines.append("")
     lines.append(f"Report written: {report_path}")
@@ -543,7 +567,7 @@ def run_plot_batch(
         return "\n".join(lines), msg
 
     is_resume = bool(resume_batch)
-    if is_resume:
+    if resume_batch:
         resume_ref = Path(resume_batch)
         if resume_ref.is_dir():
             batch_dir = resume_ref.resolve()
@@ -573,7 +597,9 @@ def run_plot_batch(
     )
     planned = select_items_for_run(state, retry_failed=retry_failed)
     if not planned:
-        checkpoint_progress(batch_dir=batch_dir, state=state, mark_complete=True)
+        checkpoint_progress(
+            batch_dir=batch_dir, state=state, mark_complete=True
+        )
         lines.append("Nothing to run: all items already completed.")
         lines.append(f"Report written: {batch_dir / 'batch_report.json'}")
         return "\n".join(lines), str(batch_dir.resolve())
@@ -598,12 +624,18 @@ def run_plot_batch(
                     checkpoint_progress(batch_dir=batch_dir, state=state)
                     data_path = Path(item["data"])
                     if not data_path.is_file():
-                        mark_item_failure(state, item_key, "data file not found")
+                        mark_item_failure(
+                            state, item_key, "data file not found"
+                        )
                         checkpoint_progress(batch_dir=batch_dir, state=state)
-                        lines.append(f"  error: data file not found ({data_path})")
+                        lines.append(
+                            f"  error: data file not found ({data_path})"
+                        )
                         return
                     try:
-                        source_context, raw_data = load_statistical_plot_payload(data_path)
+                        source_context, raw_data = (
+                            load_statistical_plot_payload(data_path)
+                        )
                         ar = item.get("aspect_ratio") or _aspect_ratio_value(
                             default_aspect_ratio_label
                         )
@@ -614,7 +646,9 @@ def run_plot_batch(
                             raw_data={"data": raw_data},
                             aspect_ratio=ar,
                         )
-                        result = await PaperBananaPipeline(settings=settings).generate(gen_in)
+                        result = await PaperBananaPipeline(
+                            settings=settings
+                        ).generate(gen_in)
                         mark_item_success(
                             state,
                             item_key,
@@ -629,12 +663,16 @@ def run_plot_batch(
                         mark_item_failure(state, item_key, str(e))
                         checkpoint_progress(batch_dir=batch_dir, state=state)
                         if attempt < max_retries:
-                            lines.append(f"  retry {attempt + 1}/{max_retries}: {e}")
+                            lines.append(
+                                f"  retry {attempt + 1}/{max_retries}: {e}"
+                            )
                             continue
                         lines.append(f"  error: {e}")
                         return
 
-        await asyncio.gather(*[_run_one(idx, item) for idx, item, _ in planned])
+        await asyncio.gather(
+            *[_run_one(idx, item) for idx, item, _ in planned]
+        )
 
     asyncio.run(_run_all_items())
 

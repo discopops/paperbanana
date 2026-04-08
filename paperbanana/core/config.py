@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Literal, Optional
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
 
@@ -60,8 +60,12 @@ class Settings(BaseSettings):
     # Provider settings
     vlm_provider: str = Field(default="gemini", alias="VLM_PROVIDER")
     vlm_model: str = Field(default="gemini-2.0-flash", alias="VLM_MODEL")
-    image_provider: str = Field(default="google_imagen", alias="IMAGE_PROVIDER")
-    image_model: str = Field(default="gemini-3-pro-image-preview", alias="IMAGE_MODEL")
+    image_provider: str = Field(
+        default="google_imagen", alias="IMAGE_PROVIDER"
+    )
+    image_model: str = Field(
+        default="gemini-3-pro-image-preview", alias="IMAGE_MODEL"
+    )
 
     # Pipeline settings
     num_retrieval_examples: int = 10
@@ -84,11 +88,15 @@ class Settings(BaseSettings):
     guidelines_path: str = "data/guidelines"
 
     # Cache settings
-    cache_dir: Optional[str] = Field(default=None, alias="PAPERBANANA_CACHE_DIR")
+    cache_dir: Optional[str] = Field(
+        default=None, alias="PAPERBANANA_CACHE_DIR"
+    )
 
     # Cost tracking
     budget_usd: Optional[float] = Field(
-        default=None, gt=0, description="Budget cap in USD; pipeline aborts if exceeded"
+        default=None,
+        gt=0,
+        description="Budget cap in USD; pipeline aborts if exceeded",
     )
 
     # Output settings
@@ -105,21 +113,41 @@ class Settings(BaseSettings):
 
     # API Keys (loaded from environment)
     google_api_key: Optional[str] = Field(default=None, alias="GOOGLE_API_KEY")
-    openrouter_api_key: Optional[str] = Field(default=None, alias="OPENROUTER_API_KEY")
+    openrouter_api_key: Optional[str] = Field(
+        default=None, alias="OPENROUTER_API_KEY"
+    )
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
-    anthropic_api_key: Optional[str] = Field(default=None, alias="ANTHROPIC_API_KEY")
-    google_base_url: Optional[str] = Field(default=None, alias="GOOGLE_BASE_URL")
-    google_vlm_model: Optional[str] = Field(default=None, alias="GOOGLE_VLM_MODEL")
-    google_image_model: Optional[str] = Field(default=None, alias="GOOGLE_IMAGE_MODEL")
-    openai_base_url: str = Field(default="https://api.openai.com/v1", alias="OPENAI_BASE_URL")
-    openai_vlm_model: Optional[str] = Field(default=None, alias="OPENAI_VLM_MODEL")
-    openai_image_model: Optional[str] = Field(default=None, alias="OPENAI_IMAGE_MODEL")
+    anthropic_api_key: Optional[str] = Field(
+        default=None, alias="ANTHROPIC_API_KEY"
+    )
+    google_base_url: Optional[str] = Field(
+        default=None, alias="GOOGLE_BASE_URL"
+    )
+    google_vlm_model: Optional[str] = Field(
+        default=None, alias="GOOGLE_VLM_MODEL"
+    )
+    google_image_model: Optional[str] = Field(
+        default=None, alias="GOOGLE_IMAGE_MODEL"
+    )
+    openai_base_url: str = Field(
+        default="https://api.openai.com/v1", alias="OPENAI_BASE_URL"
+    )
+    openai_vlm_model: Optional[str] = Field(
+        default=None, alias="OPENAI_VLM_MODEL"
+    )
+    openai_image_model: Optional[str] = Field(
+        default=None, alias="OPENAI_IMAGE_MODEL"
+    )
 
     # AWS Bedrock settings
     aws_region: str = Field(default="us-east-1", alias="AWS_REGION")
     aws_profile: Optional[str] = Field(default=None, alias="AWS_PROFILE")
-    bedrock_vlm_model: Optional[str] = Field(default=None, alias="BEDROCK_VLM_MODEL")
-    bedrock_image_model: Optional[str] = Field(default=None, alias="BEDROCK_IMAGE_MODEL")
+    bedrock_vlm_model: Optional[str] = Field(
+        default=None, alias="BEDROCK_VLM_MODEL"
+    )
+    bedrock_image_model: Optional[str] = Field(
+        default=None, alias="BEDROCK_IMAGE_MODEL"
+    )
 
     @property
     def effective_vlm_model(self) -> str:
@@ -139,12 +167,17 @@ class Settings(BaseSettings):
             return self.google_image_model
         if self.image_provider == "openai_imagen" and self.openai_image_model:
             return self.openai_image_model
-        if self.image_provider == "bedrock_imagen" and self.bedrock_image_model:
+        if (
+            self.image_provider == "bedrock_imagen"
+            and self.bedrock_image_model
+        ):
             return self.bedrock_image_model
         return self.image_model
 
     # SSL
-    skip_ssl_verification: bool = Field(default=False, alias="SKIP_SSL_VERIFICATION")
+    skip_ssl_verification: bool = Field(
+        default=False, alias="SKIP_SSL_VERIFICATION"
+    )
 
     model_config = {
         "env_file": ".env",
@@ -161,7 +194,9 @@ class Settings(BaseSettings):
             return "png"
         v = str(v).lower()
         if v not in ("png", "jpeg", "webp"):
-            raise ValueError(f"output_format must be png, jpeg, or webp. Got: {v}")
+            raise ValueError(
+                f"output_format must be png, jpeg, or webp. Got: {v}"
+            )
         return v
 
     @field_validator("exemplar_retrieval_top_k")
@@ -196,7 +231,9 @@ class Settings(BaseSettings):
             return "neurips"
         v = str(v).lower()
         if v not in ("neurips", "icml", "acl", "ieee", "custom"):
-            raise ValueError(f"venue must be neurips, icml, acl, ieee, or custom. Got: {v}")
+            raise ValueError(
+                f"venue must be neurips, icml, acl, ieee, or custom. Got: {v}"
+            )
         return v
 
     @classmethod
@@ -233,8 +270,8 @@ def _flatten_yaml(config: dict, prefix: str = "") -> dict:
         "pipeline.exemplar_retrieval_endpoint": "exemplar_retrieval_endpoint",
         "pipeline.exemplar_retrieval_mode": "exemplar_retrieval_mode",
         "pipeline.exemplar_retrieval_top_k": "exemplar_retrieval_top_k",
-        "pipeline.exemplar_retrieval_timeout_seconds": "exemplar_retrieval_timeout_seconds",
-        "pipeline.exemplar_retrieval_max_retries": "exemplar_retrieval_max_retries",
+        "pipeline.exemplar_retrieval_timeout_seconds": "exemplar_retrieval_timeout_seconds",  # noqa: E501
+        "pipeline.exemplar_retrieval_max_retries": "exemplar_retrieval_max_retries",  # noqa: E501
         "reference.path": "reference_set_path",
         "reference.guidelines_path": "guidelines_path",
         "pipeline.venue": "venue",

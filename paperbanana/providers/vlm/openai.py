@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 import structlog
 from PIL import Image
@@ -71,11 +71,11 @@ class OpenAIVLM(VLMProvider):
     ) -> str:
         client = self._get_client()
 
-        messages = []
+        messages: list[dict[str, Any]] = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
 
-        content = []
+        content: list[dict[str, Any]] = []
         if images:
             for img in images:
                 b64 = image_to_base64(img)

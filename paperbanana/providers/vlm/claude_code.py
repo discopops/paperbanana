@@ -54,7 +54,11 @@ class ClaudeCodeVLM(VLMProvider):
     def is_available(self) -> bool:
         return shutil.which("claude") is not None
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=30), reraise=True)
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(min=2, max=30),
+        reraise=True,
+    )
     async def generate(
         self,
         prompt: str,
@@ -111,7 +115,7 @@ class ClaudeCodeVLM(VLMProvider):
         full_prompt = ""
 
         if response_format == "json":
-            full_prompt += "[Output format: respond with valid JSON only, no markdown fences]\n\n"
+            full_prompt += "[Output format: respond with valid JSON only, no markdown fences]\n\n"  # noqa: E501
 
         full_prompt += prompt
 
@@ -167,7 +171,9 @@ class ClaudeCodeVLM(VLMProvider):
                 stderr=error_msg[:500] if error_msg else None,
                 stdout=stdout_msg[:500] if stdout_msg else None,
             )
-            raise RuntimeError(f"claude CLI exited with code {proc.returncode}: {combined[:500]}")
+            raise RuntimeError(
+                f"claude CLI exited with code {proc.returncode}: {combined[:500]}"  # noqa: E501
+            )
 
         raw = stdout.decode()
 

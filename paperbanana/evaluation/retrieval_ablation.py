@@ -228,6 +228,8 @@ class RetrievalAblationRunner:
             if not result.human_preference_proxy:
                 continue
             raw_score = result.human_preference_proxy.get("overall_score")
+            if raw_score is None:
+                continue
             try:
                 score = float(raw_score)
             except (TypeError, ValueError):

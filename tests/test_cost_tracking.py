@@ -1,4 +1,4 @@
-"""Tests for cost tracking, pricing lookup, budget guard, and cost estimation."""
+"""Tests for cost tracking, pricing lookup, budget guard, and cost estimation."""  # noqa: E501
 
 from __future__ import annotations
 
@@ -29,7 +29,9 @@ class TestPricingLookup:
         assert result is None
 
     def test_exact_match_image(self):
-        result = lookup_image_price("google_imagen", "gemini-3-pro-image-preview")
+        result = lookup_image_price(
+            "google_imagen", "gemini-3-pro-image-preview"
+        )
         assert result is not None
         assert result == 0.0
 
@@ -146,7 +148,9 @@ class TestCostTracker:
         )
         assert tracker.vlm_cost > 0
         assert tracker.image_cost > 0
-        assert tracker.total_cost == pytest.approx(tracker.vlm_cost + tracker.image_cost)
+        assert tracker.total_cost == pytest.approx(
+            tracker.vlm_cost + tracker.image_cost
+        )
 
     def test_unknown_model_pricing_not_known(self):
         tracker = CostTracker()
@@ -179,7 +183,7 @@ class TestBudgetGuard:
         assert tracker.is_over_budget is False
 
     def test_is_over_budget_flag_set(self):
-        """record_vlm_call should not raise; the pipeline checks is_over_budget at checkpoints."""
+        """record_vlm_call should not raise; the pipeline checks is_over_budget at checkpoints."""  # noqa: E501
         tracker = CostTracker(budget=0.001)
         # Should NOT raise — just sets the over-budget flag
         tracker.record_vlm_call(
@@ -243,7 +247,9 @@ class TestCostEstimator:
         assert "estimated_total_usd" in result
         assert "vlm_calls" in result
         assert "image_calls" in result
-        assert result["vlm_calls"] >= 6  # retriever + planner + stylist + 3x critic
+        assert (
+            result["vlm_calls"] >= 6
+        )  # retriever + planner + stylist + 3x critic
         assert result["image_calls"] == 3
         # Free tier — cost should be 0
         assert result["estimated_total_usd"] == 0.0

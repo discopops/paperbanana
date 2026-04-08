@@ -52,7 +52,9 @@ class BenchmarkReport(BaseModel):
     """Full benchmark run report."""
 
     created_at: str
-    run_dir: Optional[str] = None  # Directory where report and partial results were written
+    run_dir: Optional[str] = (
+        None  # Directory where report and partial results were written
+    )
     settings_snapshot: dict = Field(default_factory=dict)
     total_entries: int = 0
     completed: int = 0
@@ -110,13 +112,19 @@ def aggregate_results(entries: list[BenchmarkEntryResult]) -> dict:
     ties = len(scored) - model_wins - human_wins
 
     overall_scores = [_score(e) for e in scored]
-    mean_overall = sum(overall_scores) / len(overall_scores) if overall_scores else 0.0
+    mean_overall = (
+        sum(overall_scores) / len(overall_scores) if overall_scores else 0.0
+    )
 
     # Per-dimension means
     dimension_means: dict[str, float] = {}
     for dim in DIMENSIONS:
         key = f"{dim}_score"
-        values = [float(e.evaluation[key]) for e in scored if e.evaluation and key in e.evaluation]
+        values = [
+            float(e.evaluation[key])
+            for e in scored
+            if e.evaluation and key in e.evaluation
+        ]
         if values:
             dimension_means[dim] = round(sum(values) / len(values), 1)
 
@@ -137,8 +145,12 @@ def aggregate_results(entries: list[BenchmarkEntryResult]) -> dict:
             "mean_score": round(sum(cat_scores) / n, 1) if n else 0.0,
         }
 
-    gen_times = [e.generation_seconds for e in scored if e.generation_seconds > 0]
-    mean_gen_time = round(sum(gen_times) / len(gen_times), 1) if gen_times else 0.0
+    gen_times = [
+        e.generation_seconds for e in scored if e.generation_seconds > 0
+    ]
+    mean_gen_time = (
+        round(sum(gen_times) / len(gen_times), 1) if gen_times else 0.0
+    )
 
     return {
         "evaluated": len(scored),
@@ -163,16 +175,20 @@ class BenchmarkRunner:
         self,
         settings: Settings,
         *,
-        pipeline_factory: Callable[[Settings], PaperBananaPipeline] = PaperBananaPipeline,
+        pipeline_factory: Callable[
+            [Settings], PaperBananaPipeline
+        ] = PaperBananaPipeline,
         judge_factory: Optional[Callable[[Settings], VLMJudge]] = None,
     ):
         self.settings = settings
         self.pipeline_factory = pipeline_factory
         self.judge_factory = judge_factory or self._default_judge_factory
-        # Concurrency for processing benchmark entries (generation + evaluation).
+        # Concurrency for processing benchmark entries (generation + evaluation).  # noqa: E501
         # Defaults to 1 to preserve existing sequential behaviour unless
         # explicitly overridden by the caller.
-        self.concurrency: int = max(1, getattr(settings, "benchmark_concurrency", 1))
+        self.concurrency: int = max(
+            1, getattr(settings, "benchmark_concurrency", 1)
+        )
 
     def _default_judge_factory(self, settings: Settings) -> VLMJudge:
         from paperbanana.core.utils import find_prompt_dir
@@ -187,14 +203,18 @@ class BenchmarkRunner:
         ids: Optional[list[str]] = None,
         limit: Optional[int] = None,
     ) -> list[ReferenceExample]:
-        """Load benchmark entries from the reference store with optional filtering."""
+        """Load benchmark entries from the reference store with optional filtering."""  # noqa: E501
         store = ReferenceStore.from_settings(self.settings)
         examples = store.get_all()
 
         if not examples:
-            raise ValueError("No benchmark entries found. Run 'paperbanana data download' first.")
+            raise ValueError(
+                "No benchmark entries found. Run 'paperbanana data download' first."  # noqa: E501
+            )
 
-        filtered = filter_examples(examples, category=category, ids=ids, limit=limit)
+        filtered = filter_examples(
+            examples, category=category, ids=ids, limit=limit
+        )
         logger.info(
             "Loaded benchmark entries",
             total=len(examples),
@@ -215,7 +235,7 @@ class BenchmarkRunner:
             entries: Benchmark entries to process.
             output_dir: Directory for outputs. Auto-generated if None.
             eval_only_dir: If set, skip generation and evaluate existing images
-                from this directory. Expects <entry_id>/final_output.png layout.
+                from this directory. Expects <entry_id>/final_output.png layout.  # noqa: E501
         """
         run_dir = (
             Path(output_dir)
@@ -244,7 +264,10 @@ class BenchmarkRunner:
                     category=entry.category,
                 )
                 result = await self._process_entry(
-                    entry, judge=judge, run_dir=run_dir, eval_only_dir=eval_only_dir
+                    entry,
+                    judge=judge,
+                    run_dir=run_dir,
+                    eval_only_dir=eval_only_dir,
                 )
             # Append and save partials under a lock so that writes remain
             # consistent even when many tasks complete at once.
@@ -260,7 +283,9 @@ class BenchmarkRunner:
 
         completed = [r for r in results if r.evaluation is not None]
         failed = [r for r in results if r.error is not None]
-        skipped = [r for r in results if r.error is None and r.evaluation is None]
+        skipped = [
+            r for r in results if r.error is None and r.evaluation is None
+        ]
 
         report = BenchmarkReport(
             created_at=datetime.datetime.now().isoformat(),
@@ -300,7 +325,9 @@ class BenchmarkRunner:
         eval_only_dir: Optional[str] = None,
     ) -> BenchmarkEntryResult:
         """Generate and evaluate a single benchmark entry."""
-        result = BenchmarkEntryResult(id=entry.id, category=entry.category or "")
+        result = BenchmarkEntryResult(
+            id=entry.id, category=entry.category or ""
+        )
 
         # Skip entries without reference images (can't evaluate)
         if not entry.image_path or not Path(entry.image_path).exists():
@@ -325,7 +352,9 @@ class BenchmarkRunner:
                 image_path = str(candidate)
             else:
                 result.error = f"generated image not found in {eval_only_dir}"
-                logger.warning("Skipping eval-only entry: image not found", id=entry.id)
+                logger.warning(
+                    "Skipping eval-only entry: image not found", id=entry.id
+                )
                 return result
         else:
             try:
@@ -338,7 +367,9 @@ class BenchmarkRunner:
                         diagram_type=DiagramType.METHODOLOGY,
                     )
                 )
-                result.generation_seconds = round(time.perf_counter() - gen_start, 1)
+                result.generation_seconds = round(
+                    time.perf_counter() - gen_start, 1
+                )
                 result.run_id = gen_output.metadata.get("run_id")
                 result.image_path = gen_output.image_path
                 result.iteration_count = len(gen_output.iterations)

@@ -58,7 +58,10 @@ class _FakePipeline:
                     ),
                 )
             ],
-            metadata={"run_id": f"run_{prompt_dir}", "timing": {"total_seconds": 3.0}},
+            metadata={
+                "run_id": f"run_{prompt_dir}",
+                "timing": {"total_seconds": 3.0},
+            },
         )
 
 
@@ -68,10 +71,18 @@ class _FakeJudge:
 
     async def evaluate(self, **kwargs) -> EvaluationScore:
         return EvaluationScore(
-            faithfulness=DimensionResult(winner="Model", score=self._score, reasoning=""),
-            conciseness=DimensionResult(winner="Model", score=self._score, reasoning=""),
-            readability=DimensionResult(winner="Model", score=self._score, reasoning=""),
-            aesthetics=DimensionResult(winner="Model", score=self._score, reasoning=""),
+            faithfulness=DimensionResult(
+                winner="Model", score=self._score, reasoning=""
+            ),
+            conciseness=DimensionResult(
+                winner="Model", score=self._score, reasoning=""
+            ),
+            readability=DimensionResult(
+                winner="Model", score=self._score, reasoning=""
+            ),
+            aesthetics=DimensionResult(
+                winner="Model", score=self._score, reasoning=""
+            ),
             overall_winner="Model",
             overall_score=self._score,
         )
@@ -89,13 +100,17 @@ def _make_prompt_dir(tmp_path, name: str = "prompts") -> str:
 
 
 def test_compute_deltas_positive():
-    deltas, overall = compute_dimension_deltas(_make_eval_dict(60.0), _make_eval_dict(80.0))
+    deltas, overall = compute_dimension_deltas(
+        _make_eval_dict(60.0), _make_eval_dict(80.0)
+    )
     assert overall == 20.0
     assert deltas["faithfulness"] == 20.0
 
 
 def test_compute_deltas_negative():
-    deltas, overall = compute_dimension_deltas(_make_eval_dict(90.0), _make_eval_dict(70.0))
+    deltas, overall = compute_dimension_deltas(
+        _make_eval_dict(90.0), _make_eval_dict(70.0)
+    )
     assert overall == -20.0
 
 
@@ -109,7 +124,9 @@ def test_compute_deltas_zero():
 # ── build_summary ────────────────────────────────────────────────
 
 
-def _make_comparison(entry_id: str, baseline_score: float, variant_score: float):
+def _make_comparison(
+    entry_id: str, baseline_score: float, variant_score: float
+):
     b = PromptVariantResult(
         entry_id=entry_id,
         variant_name="baseline",
@@ -120,8 +137,16 @@ def _make_comparison(entry_id: str, baseline_score: float, variant_score: float)
         variant_name="variant",
         evaluation=_make_eval_dict(variant_score),
     )
-    deltas, overall_delta = compute_dimension_deltas(b.evaluation, v.evaluation)
-    winner = "variant" if overall_delta > 0 else ("baseline" if overall_delta < 0 else "tie")
+    assert b.evaluation is not None
+    assert v.evaluation is not None
+    deltas, overall_delta = compute_dimension_deltas(
+        b.evaluation, v.evaluation
+    )
+    winner = (
+        "variant"
+        if overall_delta > 0
+        else ("baseline" if overall_delta < 0 else "tie")
+    )
     return PromptComparisonEntry(
         entry_id=entry_id,
         baseline=b,
@@ -181,8 +206,10 @@ def test_validate_prompt_dir_no_subdirectory(tmp_path):
 # ── PromptAblationRunner ────────────────────────────────────────
 
 
-def _setup_runner(tmp_path, pipeline_factory=None, judge_factory=None, **settings_kw):
-    """Shared setup: creates prompt dirs, reference image, entries, and runner."""
+def _setup_runner(
+    tmp_path, pipeline_factory=None, judge_factory=None, **settings_kw
+):
+    """Shared setup: creates prompt dirs, reference image, entries, and runner."""  # noqa: E501
     baseline_dir = _make_prompt_dir(tmp_path, "baseline_prompts")
     variant_dir = _make_prompt_dir(tmp_path, "variant_prompts")
 
@@ -250,10 +277,18 @@ async def test_runner_detects_variant_winning(tmp_path):
             self._call_count += 1
             score = 90.0 if self._call_count == 2 else 60.0
             return EvaluationScore(
-                faithfulness=DimensionResult(winner="Model", score=score, reasoning=""),
-                conciseness=DimensionResult(winner="Model", score=score, reasoning=""),
-                readability=DimensionResult(winner="Model", score=score, reasoning=""),
-                aesthetics=DimensionResult(winner="Model", score=score, reasoning=""),
+                faithfulness=DimensionResult(
+                    winner="Model", score=score, reasoning=""
+                ),
+                conciseness=DimensionResult(
+                    winner="Model", score=score, reasoning=""
+                ),
+                readability=DimensionResult(
+                    winner="Model", score=score, reasoning=""
+                ),
+                aesthetics=DimensionResult(
+                    winner="Model", score=score, reasoning=""
+                ),
                 overall_winner="Model",
                 overall_score=score,
             )
@@ -313,9 +348,16 @@ async def test_runner_handles_generation_failure(tmp_path):
 @pytest.mark.asyncio
 async def test_runner_rejects_invalid_prompt_dir(tmp_path):
     baseline_dir = _make_prompt_dir(tmp_path, "baseline_prompts")
-    settings = Settings(output_dir=str(tmp_path), reference_set_path=str(tmp_path))
+    settings = Settings(
+        output_dir=str(tmp_path), reference_set_path=str(tmp_path)
+    )
     entries = [
-        ReferenceExample(id="x", source_context="ctx", caption="cap", image_path="/tmp/x.png"),
+        ReferenceExample(
+            id="x",
+            source_context="ctx",
+            caption="cap",
+            image_path="/tmp/x.png",
+        ),
     ]
 
     runner = PromptAblationRunner(
@@ -347,7 +389,7 @@ async def test_save_report(tmp_path):
 
 
 def test_benchmark_concurrency_field():
-    """benchmark_concurrency should be accepted by Settings (not silently dropped)."""
+    """benchmark_concurrency should be accepted by Settings (not silently dropped)."""  # noqa: E501
     settings = Settings(benchmark_concurrency=4)
     assert settings.benchmark_concurrency == 4
 
@@ -357,7 +399,9 @@ def test_benchmark_concurrency_default():
 
 
 def test_prompt_dir_field():
-    assert Settings(prompt_dir="/custom/prompts").prompt_dir == "/custom/prompts"
+    assert (
+        Settings(prompt_dir="/custom/prompts").prompt_dir == "/custom/prompts"
+    )
 
 
 def test_prompt_dir_default_is_none():

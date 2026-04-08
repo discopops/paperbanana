@@ -12,7 +12,11 @@ def list_run_ids(output_dir: str) -> list[str]:
     root = Path(output_dir)
     if not root.is_dir():
         return []
-    runs = [d.name for d in root.iterdir() if d.is_dir() and d.name.startswith("run_")]
+    runs = [
+        d.name
+        for d in root.iterdir()
+        if d.is_dir() and d.name.startswith("run_")
+    ]
     runs.sort(
         key=lambda name: (Path(output_dir) / name).stat().st_mtime,
     )
@@ -24,7 +28,11 @@ def list_batch_ids(output_dir: str) -> list[str]:
     root = Path(output_dir)
     if not root.is_dir():
         return []
-    batches = [d.name for d in root.iterdir() if d.is_dir() and d.name.startswith("batch_")]
+    batches = [
+        d.name
+        for d in root.iterdir()
+        if d.is_dir() and d.name.startswith("batch_")
+    ]
     batches.sort(
         key=lambda name: (Path(output_dir) / name).stat().st_mtime,
     )
@@ -84,7 +92,11 @@ def load_run_summary(output_dir: str, run_id: str) -> dict[str, Any]:
         return int(parts[1])
 
     iter_dirs = sorted(
-        [d for d in run_dir.iterdir() if d.is_dir() and d.name.startswith("iter_")],
+        [
+            d
+            for d in run_dir.iterdir()
+            if d.is_dir() and d.name.startswith("iter_")
+        ],
         key=_iter_sort_key,
     )
     images: list[str] = []
@@ -124,7 +136,8 @@ def load_batch_summary(output_dir: str, batch_id: str) -> dict[str, Any]:
                 status_counts[status] = status_counts.get(status, 0) + 1
             out["status_counts"] = status_counts
             out["can_resume"] = any(
-                status in ("pending", "running", "failed") for status in status_counts
+                status in ("pending", "running", "failed")
+                for status in status_counts
             )
         except (OSError, json.JSONDecodeError) as e:
             out["report_preview"] = f"(could not read report: {e})"

@@ -28,10 +28,10 @@ bare-bones styling toward a more graphic, publication-ready presentation.
 ### Color Palettes
 
 Categorical Data:
-- Soft Pastels: Matte, low-saturation colors (salmon, sky blue, mint, lavender).
+- Soft Pastels: Matte, low-saturation colors (salmon, sky blue, mint, lavender).  # noqa: E501
 - Muted Earth Tones: Olive, beige, slate grey, and navy.
 - High-Contrast Primaries: Used sparingly.
-- Accessibility Mode: Combine color with geometric patterns (hatches, dots, stripes).
+- Accessibility Mode: Combine color with geometric patterns (hatches, dots, stripes).  # noqa: E501
 
 Sequential & Heatmaps:
 - Perceptually Uniform: "Viridis" and "Magma/Plasma" are the standard.
@@ -101,7 +101,7 @@ def load_plot_guidelines(
     """Load statistical plot style guidelines.
 
     Args:
-        guidelines_path: Base directory for guideline files. If None, uses defaults.
+        guidelines_path: Base directory for guideline files. If None, uses defaults.  # noqa: E501
         venue: Target venue (neurips, icml, acl, ieee). When set to "custom" or
             None, the loader skips venue subdirectory resolution and looks for
             files directly under guidelines_path (original behavior).
@@ -112,17 +112,23 @@ def load_plot_guidelines(
     if guidelines_path:
         base = Path(guidelines_path)
 
-        # Try venue-specific path first: {guidelines_path}/{venue}/plot_style_guide.md
+        # Try venue-specific path first: {guidelines_path}/{venue}/plot_style_guide.md  # noqa: E501
         if venue and venue != "custom":
             venue_path = base / venue / "plot_style_guide.md"
             if venue_path.exists():
-                logger.info("Loading plot guidelines", venue=venue, path=str(venue_path))
+                logger.info(
+                    "Loading plot guidelines",
+                    venue=venue,
+                    path=str(venue_path),
+                )
                 return venue_path.read_text(encoding="utf-8")
 
         # Fallback to flat path: {guidelines_path}/plot_style_guide.md
         flat_path = base / "plot_style_guide.md"
         if flat_path.exists():
-            logger.info("Loading plot guidelines (flat path)", path=str(flat_path))
+            logger.info(
+                "Loading plot guidelines (flat path)", path=str(flat_path)
+            )
             return flat_path.read_text(encoding="utf-8")
 
     return DEFAULT_PLOT_GUIDELINES

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from statistics import mean
 from typing import Any
 
-# Heuristic used to rank successful variants in CLI sweep reports (not a human-judgment score).
+# Heuristic used to rank successful variants in CLI sweep reports (not a human-judgment score).  # noqa: E501
 QUALITY_PROXY_MAX = 100.0
 QUALITY_PROXY_PENALTY_PER_SUGGESTION = 12.5
 
@@ -16,7 +16,8 @@ def quality_proxy_score(suggestion_count: int) -> float:
     """Map final-iteration critic suggestion count to a rough ranking score."""
     return max(
         0.0,
-        QUALITY_PROXY_MAX - QUALITY_PROXY_PENALTY_PER_SUGGESTION * float(suggestion_count),
+        QUALITY_PROXY_MAX
+        - QUALITY_PROXY_PENALTY_PER_SUGGESTION * float(suggestion_count),
     )
 
 
@@ -70,7 +71,9 @@ def parse_csv_ints(raw: str | None, *, field_name: str) -> list[int]:
         try:
             value = int(token)
         except ValueError as exc:
-            raise ValueError(f"{field_name} must contain integers. Got: '{token}'") from exc
+            raise ValueError(
+                f"{field_name} must contain integers. Got: '{token}'"
+            ) from exc
         if value < 1:
             raise ValueError(f"{field_name} values must be >= 1. Got: {value}")
         parsed.append(value)
@@ -94,7 +97,9 @@ def parse_csv_bools(raw: str | None, *, field_name: str) -> list[bool]:
         if lowered in allowed_false:
             parsed.append(False)
             continue
-        raise ValueError(f"{field_name} must use booleans (on/off,true/false,1/0). Got: '{token}'")
+        raise ValueError(
+            f"{field_name} must use booleans (on/off,true/false,1/0). Got: '{token}'"  # noqa: E501
+        )
     return parsed
 
 
@@ -110,18 +115,18 @@ def build_sweep_variants(
     max_variants: int | None = None,
 ) -> list[SweepVariant]:
     """Build cartesian sweep variants with optional truncation."""
-    axes = {
+    axes: dict[str, list[Any]] = {
         "vlm_provider": vlm_providers or ["gemini"],
-        "vlm_model": vlm_models or [None],
+        "vlm_model": vlm_models or [None],  # type: ignore[list-item]
         "image_provider": image_providers or ["google_imagen"],
-        "image_model": image_models or [None],
+        "image_model": image_models or [None],  # type: ignore[list-item]
         "refinement_iterations": refinement_iterations or [3],
         "optimize_inputs": optimize_inputs or [False],
         "auto_refine": auto_refine or [False],
     }
 
     axis_names = list(axes.keys())
-    axis_values = [axes[name] for name in axis_names]
+    axis_values: list[list[Any]] = [axes[name] for name in axis_names]
     variants: list[SweepVariant] = []
 
     for index, combo in enumerate(itertools.product(*axis_values), start=1):
@@ -130,9 +135,17 @@ def build_sweep_variants(
             SweepVariant(
                 variant_id=f"variant_{index:03d}",
                 vlm_provider=str(data["vlm_provider"]),
-                vlm_model=(str(data["vlm_model"]) if data["vlm_model"] is not None else None),
+                vlm_model=(
+                    str(data["vlm_model"])
+                    if data["vlm_model"] is not None
+                    else None
+                ),
                 image_provider=str(data["image_provider"]),
-                image_model=(str(data["image_model"]) if data["image_model"] is not None else None),
+                image_model=(
+                    str(data["image_model"])
+                    if data["image_model"] is not None
+                    else None
+                ),
                 refinement_iterations=int(data["refinement_iterations"]),
                 optimize_inputs=bool(data["optimize_inputs"]),
                 auto_refine=bool(data["auto_refine"]),
@@ -176,14 +189,27 @@ def summarize_sweep(results: list[dict[str, Any]]) -> dict[str, Any]:
         "completed": len(completed),
         "failed": len(failed),
         "best_variant": best["variant_id"] if best else None,
-        "best_quality_proxy_score": best.get("quality_proxy_score") if best else None,
+        "best_quality_proxy_score": (
+            best.get("quality_proxy_score") if best else None
+        ),
         "mean_quality_proxy_score": (
-            round(mean(float(item.get("quality_proxy_score", 0.0)) for item in completed), 2)
+            round(
+                mean(
+                    float(item.get("quality_proxy_score", 0.0))
+                    for item in completed
+                ),
+                2,
+            )
             if completed
             else None
         ),
         "mean_total_seconds": (
-            round(mean(float(item.get("total_seconds", 0.0)) for item in completed), 2)
+            round(
+                mean(
+                    float(item.get("total_seconds", 0.0)) for item in completed
+                ),
+                2,
+            )
             if completed
             else None
         ),

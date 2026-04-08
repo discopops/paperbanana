@@ -28,12 +28,12 @@ def load_batch_manifest(manifest_path: Path) -> list[dict[str, Any]]:
     """Load a batch manifest (YAML or JSON) and return a list of items.
 
     Each item is a dict with:
-      - input: path to methodology text or PDF file (resolved relative to manifest parent)
+      - input: path to methodology text or PDF file (resolved relative to manifest parent)  # noqa: E501
       - caption: figure caption / communicative intent
       - id: optional string identifier for the item (default: index-based)
-      - pdf_pages: optional 1-based page selection for PDF inputs (e.g. "1-5" or "2,4,6-8")
+      - pdf_pages: optional 1-based page selection for PDF inputs (e.g. "1-5" or "2,4,6-8")  # noqa: E501
 
-    Paths in the manifest are resolved relative to the manifest file's directory.
+    Paths in the manifest are resolved relative to the manifest file's directory.  # noqa: E501
     """
     manifest_path = Path(manifest_path).resolve()
     if not manifest_path.exists():
@@ -43,19 +43,21 @@ def load_batch_manifest(manifest_path: Path) -> list[dict[str, Any]]:
     suffix = manifest_path.suffix.lower()
     if suffix in (".yaml", ".yml"):
         try:
-            import yaml
+            import yaml  # type: ignore[import-untyped]
 
             data = yaml.safe_load(raw)
         except ImportError:
             raise RuntimeError(
-                "PyYAML is required for YAML manifests. Install with: pip install pyyaml"
+                "PyYAML is required for YAML manifests. Install with: pip install pyyaml"  # noqa: E501
             )
     elif suffix == ".json":
         import json
 
         data = json.loads(raw)
     else:
-        raise ValueError(f"Manifest must be .yaml, .yml, or .json. Got: {manifest_path.suffix}")
+        raise ValueError(
+            f"Manifest must be .yaml, .yml, or .json. Got: {manifest_path.suffix}"  # noqa: E501
+        )
 
     if data is None:
         raise ValueError("Manifest is empty")
@@ -64,22 +66,30 @@ def load_batch_manifest(manifest_path: Path) -> list[dict[str, Any]]:
     elif isinstance(data, dict) and "items" in data:
         items = data["items"]
     else:
-        raise ValueError("Manifest must be a list of items or an object with an 'items' list")
+        raise ValueError(
+            "Manifest must be a list of items or an object with an 'items' list"  # noqa: E501
+        )
 
     result = []
     for i, entry in enumerate(items):
         if not isinstance(entry, dict):
-            raise ValueError(f"Manifest item {i} must be an object, got {type(entry).__name__}")
+            raise ValueError(
+                f"Manifest item {i} must be an object, got {type(entry).__name__}"  # noqa: E501
+            )
         inp = entry.get("input")
         caption = entry.get("caption")
         if not inp or not caption:
-            raise ValueError(f"Manifest item {i}: 'input' and 'caption' are required")
+            raise ValueError(
+                f"Manifest item {i}: 'input' and 'caption' are required"
+            )
         input_path = Path(inp)
         if not input_path.is_absolute():
             input_path = (parent / input_path).resolve()
         pdf_pages = entry.get("pdf_pages")
         if pdf_pages is not None and not isinstance(pdf_pages, str):
-            raise ValueError(f"Manifest item {i}: 'pdf_pages' must be a string when set")
+            raise ValueError(
+                f"Manifest item {i}: 'pdf_pages' must be a string when set"
+            )
         result.append(
             {
                 "input": str(input_path),
@@ -92,11 +102,11 @@ def load_batch_manifest(manifest_path: Path) -> list[dict[str, Any]]:
 
 
 def load_plot_batch_manifest(manifest_path: Path) -> list[dict[str, Any]]:
-    """Load a plot batch manifest (YAML or JSON): multiple statistical plots in one run.
+    """Load a plot batch manifest (YAML or JSON): multiple statistical plots in one run.  # noqa: E501
 
     Each item must include:
       - data: path to CSV or JSON (resolved relative to manifest parent)
-      - intent: communicative intent for the plot (like ``paperbanana plot --intent``)
+      - intent: communicative intent for the plot (like ``paperbanana plot --intent``)  # noqa: E501
       - id: optional string identifier (default: index-based)
 
     Optional per-item fields (override CLI defaults when set):
@@ -115,12 +125,14 @@ def load_plot_batch_manifest(manifest_path: Path) -> list[dict[str, Any]]:
             data = yaml.safe_load(raw)
         except ImportError:
             raise RuntimeError(
-                "PyYAML is required for YAML manifests. Install with: pip install pyyaml"
+                "PyYAML is required for YAML manifests. Install with: pip install pyyaml"  # noqa: E501
             )
     elif suffix == ".json":
         data = json.loads(raw)
     else:
-        raise ValueError(f"Manifest must be .yaml, .yml, or .json. Got: {manifest_path.suffix}")
+        raise ValueError(
+            f"Manifest must be .yaml, .yml, or .json. Got: {manifest_path.suffix}"  # noqa: E501
+        )
 
     if data is None:
         raise ValueError("Manifest is empty")
@@ -129,27 +141,35 @@ def load_plot_batch_manifest(manifest_path: Path) -> list[dict[str, Any]]:
     elif isinstance(data, dict) and "items" in data:
         items = data["items"]
     else:
-        raise ValueError("Manifest must be a list of items or an object with an 'items' list")
+        raise ValueError(
+            "Manifest must be a list of items or an object with an 'items' list"  # noqa: E501
+        )
 
     result = []
     for i, entry in enumerate(items):
         if not isinstance(entry, dict):
-            raise ValueError(f"Manifest item {i} must be an object, got {type(entry).__name__}")
+            raise ValueError(
+                f"Manifest item {i} must be an object, got {type(entry).__name__}"  # noqa: E501
+            )
         data_key = entry.get("data")
         intent = entry.get("intent")
         if not data_key or not intent:
-            raise ValueError(f"Manifest item {i}: 'data' and 'intent' are required")
+            raise ValueError(
+                f"Manifest item {i}: 'data' and 'intent' are required"
+            )
         data_path = Path(data_key)
         if not data_path.is_absolute():
             data_path = (parent / data_path).resolve()
         suffix_d = data_path.suffix.lower()
         if suffix_d not in (".csv", ".json"):
             raise ValueError(
-                f"Manifest item {i}: 'data' must be a .csv or .json file, got {data_path.suffix!r}"
+                f"Manifest item {i}: 'data' must be a .csv or .json file, got {data_path.suffix!r}"  # noqa: E501
             )
         aspect_ratio = entry.get("aspect_ratio")
         if aspect_ratio is not None and not isinstance(aspect_ratio, str):
-            raise ValueError(f"Manifest item {i}: 'aspect_ratio' must be a string when set")
+            raise ValueError(
+                f"Manifest item {i}: 'aspect_ratio' must be a string when set"
+            )
         result.append(
             {
                 "data": str(data_path),
@@ -165,7 +185,7 @@ def load_batch_report(batch_dir: Path) -> dict[str, Any]:
     """Load batch_report.json from a batch output directory.
 
     Args:
-        batch_dir: Path to the batch run directory (e.g. outputs/batch_20250109_123456_abc).
+        batch_dir: Path to the batch run directory (e.g. outputs/batch_20250109_123456_abc).  # noqa: E501
 
     Returns:
         The report dict (batch_id, manifest, items, total_seconds).
@@ -179,11 +199,15 @@ def load_batch_report(batch_dir: Path) -> dict[str, Any]:
     if not batch_dir.exists() or not batch_dir.is_dir():
         raise FileNotFoundError(f"Batch directory not found: {batch_dir}")
     if not report_path.exists():
-        raise FileNotFoundError(f"No {REPORT_FILENAME} in {batch_dir}. Run a batch first.")
+        raise FileNotFoundError(
+            f"No {REPORT_FILENAME} in {batch_dir}. Run a batch first."
+        )
     raw = report_path.read_text(encoding="utf-8")
     data = json.loads(raw)
     if not isinstance(data, dict) or "items" not in data:
-        raise ValueError(f"Invalid report: expected dict with 'items'. Got: {type(data)}")
+        raise ValueError(
+            f"Invalid report: expected dict with 'items'. Got: {type(data)}"
+        )
     return data
 
 
@@ -236,15 +260,15 @@ def init_or_load_checkpoint(
     if resume:
         if not cp_path.exists():
             raise FileNotFoundError(f"No {CHECKPOINT_FILENAME} in {batch_dir}")
-        state = json.loads(cp_path.read_text(encoding="utf-8"))
-        prev_items = state.get("manifest_items", [])
+        checkpoint_state = json.loads(cp_path.read_text(encoding="utf-8"))
+        prev_items = checkpoint_state.get("manifest_items", [])
         prev_keys = [x.get("_item_key") for x in prev_items]
         now_keys = [x.get("_item_key") for x in keyed_items]
         if prev_keys != now_keys:
             raise ValueError(
-                "Manifest items do not match checkpoint. Refusing resume to avoid duplication."
+                "Manifest items do not match checkpoint. Refusing resume to avoid duplication."  # noqa: E501
             )
-        return state
+        return checkpoint_state
 
     state: dict[str, Any] = {
         "batch_id": batch_id,
@@ -313,7 +337,11 @@ def mark_item_running(state: dict[str, Any], item_key: str) -> None:
 
 
 def mark_item_success(
-    state: dict[str, Any], item_key: str, run_id: str | None, output_path: str, iterations: int
+    state: dict[str, Any],
+    item_key: str,
+    run_id: str | None,
+    output_path: str,
+    iterations: int,
 ) -> None:
     item_state = state["items"][item_key]
     item_state["status"] = "success"
@@ -325,11 +353,15 @@ def mark_item_success(
     state["updated_at"] = _utc_now()
 
 
-def mark_item_failure(state: dict[str, Any], item_key: str, error: str) -> None:
+def mark_item_failure(
+    state: dict[str, Any], item_key: str, error: str
+) -> None:
     item_state = state["items"][item_key]
     item_state["status"] = "failed"
     item_state["error"] = error
-    item_state.setdefault("errors", []).append({"at": _utc_now(), "error": error})
+    item_state.setdefault("errors", []).append(
+        {"at": _utc_now(), "error": error}
+    )
     item_state["finished_at"] = _utc_now()
     state["updated_at"] = _utc_now()
 
@@ -400,11 +432,15 @@ def generate_batch_report_md(report: dict[str, Any], batch_dir: Path) -> str:
         f"- **Manifest:** `{manifest}`",
     ]
     if kind in ("methodology", "statistical_plot"):
-        label = "statistical plots" if kind == "statistical_plot" else "methodology diagrams"
+        label = (
+            "statistical plots"
+            if kind == "statistical_plot"
+            else "methodology diagrams"
+        )
         lines.append(f"- **Batch kind:** {label}")
     lines.extend(
         [
-            f"- **Summary:** {succeeded}/{total} succeeded in {total_seconds:.1f}s",
+            f"- **Summary:** {succeeded}/{total} succeeded in {total_seconds:.1f}s",  # noqa: E501
             "",
             "| ID | Caption | Status | Output / Error | Iterations |",
             "|----|--------|--------|-----------------|------------|",
@@ -424,12 +460,14 @@ def generate_batch_report_md(report: dict[str, Any], batch_dir: Path) -> str:
             out_escaped = str(out).replace("|", "\\|")
             iters = item.get("iterations", "—")
             lines.append(
-                f"| {item_id} | {caption_escaped} | {status} | `{out_escaped}` | {iters} |"
+                f"| {item_id} | {caption_escaped} | {status} | `{out_escaped}` | {iters} |"  # noqa: E501
             )
         else:
             status = "✗ Failed"
             err = (item.get("error") or "unknown").replace("|", "\\|")[:80]
-            lines.append(f"| {item_id} | {caption_escaped} | {status} | {err} | — |")
+            lines.append(
+                f"| {item_id} | {caption_escaped} | {status} | {err} | — |"
+            )
     return "\n".join(lines)
 
 
@@ -442,13 +480,20 @@ def generate_batch_report_html(report: dict[str, Any], batch_dir: Path) -> str:
 
     def escape(s: str) -> str:
         return (
-            s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+            s.replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
         )
 
     kind = report.get("batch_kind")
     kind_html = ""
     if kind in ("methodology", "statistical_plot"):
-        label = "statistical plots" if kind == "statistical_plot" else "methodology diagrams"
+        label = (
+            "statistical plots"
+            if kind == "statistical_plot"
+            else "methodology diagrams"
+        )
         kind_html = f"Batch kind: <strong>{escape(label)}</strong><br>\n  "
 
     rows = []
@@ -481,11 +526,11 @@ def generate_batch_report_html(report: dict[str, Any], batch_dir: Path) -> str:
   <meta charset="utf-8">
   <title>Batch Report — {escape(batch_id)}</title>
   <style>
-    body {{ font-family: system-ui, sans-serif; margin: 1rem 2rem; max-width: 960px; }}
+    body {{ font-family: system-ui, sans-serif; margin: 1rem 2rem; max-width: 960px; }}  # noqa: E501
     h1 {{ font-size: 1.25rem; color: #333; }}
     .meta {{ color: #666; margin-bottom: 1rem; }}
     table {{ border-collapse: collapse; width: 100%; }}
-    th, td {{ border: 1px solid #ddd; padding: 0.5rem 0.75rem; text-align: left; }}
+    th, td {{ border: 1px solid #ddd; padding: 0.5rem 0.75rem; text-align: left; }}  # noqa: E501
     th {{ background: #f5f5f5; font-weight: 600; }}
     .status.success {{ color: #0a0; font-weight: 600; }}
     .status.fail {{ color: #c00; font-weight: 600; }}
@@ -514,11 +559,11 @@ def write_batch_report(
     output_path: Path | None = None,
     format: Literal["markdown", "html", "md"] = "markdown",
 ) -> Path:
-    """Load the batch report from batch_dir, generate a report, and write it to disk.
+    """Load the batch report from batch_dir, generate a report, and write it to disk.  # noqa: E501
 
     Args:
         batch_dir: Path to the batch run directory.
-        output_path: Where to write the report. If None, writes to batch_dir/batch_report.{md|html}.
+        output_path: Where to write the report. If None, writes to batch_dir/batch_report.{md|html}.  # noqa: E501
         format: Report format: markdown, html, or md (alias for markdown).
 
     Returns:

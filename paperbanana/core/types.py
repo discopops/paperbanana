@@ -40,11 +40,19 @@ class PipelineProgressStage(str, Enum):
 class PipelineProgressEvent(BaseModel):
     """Single progress event emitted by the pipeline for callbacks."""
 
-    stage: PipelineProgressStage = Field(description="Pipeline stage identifier")
+    stage: PipelineProgressStage = Field(
+        description="Pipeline stage identifier"
+    )
     message: str = Field(description="Human-readable message")
-    seconds: Optional[float] = Field(default=None, description="Elapsed seconds for this step")
-    iteration: Optional[int] = Field(default=None, description="Refinement iteration (1-based)")
-    extra: Optional[dict[str, Any]] = Field(default=None, description="Optional extra data")
+    seconds: Optional[float] = Field(
+        default=None, description="Elapsed seconds for this step"
+    )
+    iteration: Optional[int] = Field(
+        default=None, description="Refinement iteration (1-based)"
+    )
+    extra: Optional[dict[str, Any]] = Field(
+        default=None, description="Optional extra data"
+    )
 
 
 class DiagramType(str, Enum):
@@ -57,11 +65,16 @@ class DiagramType(str, Enum):
 class GenerationInput(BaseModel):
     """Input to the PaperBanana generation pipeline."""
 
-    source_context: str = Field(description="Methodology section text or relevant paper excerpt")
-    communicative_intent: str = Field(description="Figure caption describing what to communicate")
+    source_context: str = Field(
+        description="Methodology section text or relevant paper excerpt"
+    )
+    communicative_intent: str = Field(
+        description="Figure caption describing what to communicate"
+    )
     diagram_type: DiagramType = Field(default=DiagramType.METHODOLOGY)
     raw_data: Optional[dict[str, Any]] = Field(
-        default=None, description="Raw data for statistical plots (CSV path or dict)"
+        default=None,
+        description="Raw data for statistical plots (CSV path or dict)",
     )
     aspect_ratio: Optional[str] = Field(
         default=None,
@@ -75,7 +88,7 @@ class GenerationInput(BaseModel):
     @field_validator("aspect_ratio")
     @classmethod
     def validate_aspect_ratio(cls, v: Optional[str]) -> Optional[str]:
-        """Ensure aspect_ratio, when provided, is one of the supported values."""
+        """Ensure aspect_ratio, when provided, is one of the supported values."""  # noqa: E501
         if v is None:
             return v
         if v not in SUPPORTED_ASPECT_RATIOS:
@@ -148,7 +161,9 @@ WINNER_SCORE_MAP: dict[str, float] = {
 class DimensionResult(BaseModel):
     """Result for a single comparative evaluation dimension."""
 
-    winner: str = Field(description="Model | Human | Both are good | Both are bad")
+    winner: str = Field(
+        description="Model | Human | Both are good | Both are bad"
+    )
     score: float = Field(
         ge=0.0,
         le=100.0,

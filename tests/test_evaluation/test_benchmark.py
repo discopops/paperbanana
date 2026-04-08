@@ -178,10 +178,18 @@ class _FakePipeline:
 class _FakeJudge:
     async def evaluate(self, **kwargs):
         return EvaluationScore(
-            faithfulness=DimensionResult(winner="Model", score=100.0, reasoning=""),
-            conciseness=DimensionResult(winner="Model", score=100.0, reasoning=""),
-            readability=DimensionResult(winner="Both are good", score=50.0, reasoning=""),
-            aesthetics=DimensionResult(winner="Both are good", score=50.0, reasoning=""),
+            faithfulness=DimensionResult(
+                winner="Model", score=100.0, reasoning=""
+            ),
+            conciseness=DimensionResult(
+                winner="Model", score=100.0, reasoning=""
+            ),
+            readability=DimensionResult(
+                winner="Both are good", score=50.0, reasoning=""
+            ),
+            aesthetics=DimensionResult(
+                winner="Both are good", score=50.0, reasoning=""
+            ),
             overall_winner="Model",
             overall_score=100.0,
         )
@@ -399,7 +407,7 @@ async def test_benchmark_runner_eval_only_mode(tmp_path):
 
 @pytest.mark.asyncio
 async def test_benchmark_runner_eval_only_rejects_path_traversal(tmp_path):
-    """Entry ids with '..' or path separators are rejected in eval-only mode."""
+    """Entry ids with '..' or path separators are rejected in eval-only mode."""  # noqa: E501
     ref_img = tmp_path / "ref.jpg"
     from PIL import Image
 

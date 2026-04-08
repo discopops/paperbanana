@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 import structlog
 from PIL import Image
@@ -47,7 +47,7 @@ class OpenRouterVLM(VLMProvider):
                 base_url="https://openrouter.ai/api/v1",
                 headers={
                     "Authorization": f"Bearer {self._api_key}",
-                    "HTTP-Referer": "https://github.com/llmsresearch/paperbanana",
+                    "HTTP-Referer": "https://github.com/llmsresearch/paperbanana",  # noqa: E501
                     "X-Title": "PaperBanana",
                 },
                 timeout=120.0,
@@ -69,12 +69,12 @@ class OpenRouterVLM(VLMProvider):
     ) -> str:
         client = self._get_client()
 
-        messages = []
+        messages: list[dict[str, Any]] = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
 
         # Build multimodal content array (vision images + text)
-        content = []
+        content: list[dict[str, Any]] = []
         if images:
             for img in images:
                 b64 = image_to_base64(img)

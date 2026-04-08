@@ -12,7 +12,6 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
-import json as json_mod
 
 from paperbanana.core.config import Settings
 from paperbanana.core.logging import configure_logging
@@ -73,37 +72,53 @@ def generate(
         "--input",
         "-i",
         help="Path to methodology text file or PDF (.pdf requires: pip install 'paperbanana[pdf]')",
-    ),
+    ),  # noqa: E501
     caption: Optional[str] = typer.Option(
         None, "--caption", "-c", help="Figure caption / communicative intent"
     ),
-    output: Optional[str] = typer.Option(None, "--output", "-o", help="Output image path"),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output image path"
+    ),
     vlm_provider: Optional[str] = typer.Option(
         None, "--vlm-provider", help="VLM provider (gemini)"
     ),
-    vlm_model: Optional[str] = typer.Option(None, "--vlm-model", help="VLM model name"),
+    vlm_model: Optional[str] = typer.Option(
+        None, "--vlm-model", help="VLM model name"
+    ),
     image_provider: Optional[str] = typer.Option(
         None, "--image-provider", help="Image gen provider"
     ),
-    image_model: Optional[str] = typer.Option(None, "--image-model", help="Image gen model name"),
+    image_model: Optional[str] = typer.Option(
+        None, "--image-model", help="Image gen model name"
+    ),
     iterations: Optional[int] = typer.Option(
         None, "--iterations", "-n", help="Refinement iterations"
     ),
     auto: bool = typer.Option(
-        False, "--auto", help="Loop until critic is satisfied (with safety cap)"
+        False,
+        "--auto",
+        help="Loop until critic is satisfied (with safety cap)",
     ),
     max_iterations: Optional[int] = typer.Option(
-        None, "--max-iterations", help="Safety cap for --auto mode (default: 30)"
+        None,
+        "--max-iterations",
+        help="Safety cap for --auto mode (default: 30)",
     ),
     optimize: bool = typer.Option(
-        False, "--optimize", help="Preprocess inputs for better generation (parallel enrichment)"
+        False,
+        "--optimize",
+        help="Preprocess inputs for better generation (parallel enrichment)",
     ),
-    continue_last: bool = typer.Option(False, "--continue", help="Continue from the latest run"),
+    continue_last: bool = typer.Option(
+        False, "--continue", help="Continue from the latest run"
+    ),
     continue_run: Optional[str] = typer.Option(
         None, "--continue-run", help="Continue from a specific run ID"
     ),
     feedback: Optional[str] = typer.Option(
-        None, "--feedback", help="User feedback for the critic when continuing a run"
+        None,
+        "--feedback",
+        help="User feedback for the critic when continuing a run",
     ),
     aspect_ratio: Optional[str] = typer.Option(
         None,
@@ -117,7 +132,9 @@ def generate(
         "-f",
         help="Output image format (png, jpeg, or webp)",
     ),
-    config: Optional[str] = typer.Option(None, "--config", help="Path to config YAML file"),
+    config: Optional[str] = typer.Option(
+        None, "--config", help="Path to config YAML file"
+    ),
     save_prompts: Optional[bool] = typer.Option(
         None,
         "--save-prompts/--no-save-prompts",
@@ -137,12 +154,12 @@ def generate(
         False,
         "--dry-run",
         help="Validate inputs and show what would happen without making API calls",
-    ),
+    ),  # noqa: E501
     auto_download_data: bool = typer.Option(
         False,
         "--auto-download-data",
         help="Auto-download curated expansion reference set on first run if not cached",
-    ),
+    ),  # noqa: E501
     exemplar_retrieval: bool = typer.Option(
         False,
         "--exemplar-retrieval",
@@ -172,12 +189,12 @@ def generate(
         None,
         "--exemplar-retries",
         help="Retry attempts for external exemplar retrieval on transient errors",
-    ),
+    ),  # noqa: E501
     prompt_dir: Optional[str] = typer.Option(
         None,
         "--prompt-dir",
         help="Path to alternative prompt templates directory (for A/B testing)",
-    ),
+    ),  # noqa: E501
     seed: Optional[int] = typer.Option(
         None,
         "--seed",
@@ -192,38 +209,56 @@ def generate(
         False,
         "--progress-json",
         help="Emit machine-readable JSON progress events to stdout during generation",
-    ),
+    ),  # noqa: E501
     pdf_pages: Optional[str] = typer.Option(
         None,
         "--pdf-pages",
-        help=("PDF input only: 1-based pages (e.g. '1-5', '3', '1-3,7,10-12'); default: all pages"),
+        help=(
+            "PDF input only: 1-based pages (e.g. '1-5', '3', '1-3,7,10-12'); default: all pages"
+        ),  # noqa: E501
     ),
     verbose: bool = typer.Option(
-        False, "--verbose", "-v", help="Show detailed agent progress and timing"
+        False,
+        "--verbose",
+        "-v",
+        help="Show detailed agent progress and timing",
     ),
 ):
     """Generate a methodology diagram from a text description."""
     if format not in ("png", "jpeg", "webp"):
-        console.print(f"[red]Error: Format must be png, jpeg, or webp. Got: {format}[/red]")
+        console.print(
+            f"[red]Error: Format must be png, jpeg, or webp. Got: {format}[/red]"
+        )  # noqa: E501
         raise typer.Exit(1)
 
     if feedback and not continue_run and not continue_last:
-        console.print("[red]Error: --feedback requires --continue or --continue-run[/red]")
+        console.print(
+            "[red]Error: --feedback requires --continue or --continue-run[/red]"
+        )  # noqa: E501
         raise typer.Exit(1)
-    if exemplar_mode and exemplar_mode not in ("external_then_rerank", "external_only"):
+    if exemplar_mode and exemplar_mode not in (
+        "external_then_rerank",
+        "external_only",
+    ):
         console.print(
             "[red]Error: --exemplar-mode must be external_then_rerank or external_only[/red]"
-        )
+        )  # noqa: E501
         raise typer.Exit(1)
-    if venue and venue.lower() not in ("neurips", "icml", "acl", "ieee", "custom"):
+    if venue and venue.lower() not in (
+        "neurips",
+        "icml",
+        "acl",
+        "ieee",
+        "custom",
+    ):
         console.print(
             f"[red]Error: --venue must be neurips, icml, acl, ieee, or custom. Got: {venue}[/red]"
-        )
+        )  # noqa: E501
         raise typer.Exit(1)
     if pdf_pages and (continue_last or continue_run):
         console.print(
             "[red]Error: --pdf-pages cannot be used with --continue or --continue-run[/red]"
-        )
+        )  # noqa: E501
         raise typer.Exit(1)
 
     configure_logging(verbose=verbose)
@@ -289,13 +324,19 @@ def generate(
         dm = DatasetManager(cache_dir=settings.cache_dir)
         if not dm.is_downloaded():
             console.print()
-            console.print("  [dim]●[/dim] Downloading curated expansion set...", end="")
+            console.print(
+                "  [dim]●[/dim] Downloading curated expansion set...", end=""
+            )
             try:
                 count = dm.download(dataset="curated")
-                console.print(f" [green]✓[/green] [dim]{count} examples cached[/dim]")
+                console.print(
+                    f" [green]✓[/green] [dim]{count} examples cached[/dim]"
+                )
             except Exception as e:
                 console.print(f" [red]✗[/red] Download failed: {e}")
-                console.print("    [dim]Falling back to built-in reference set[/dim]")
+                console.print(
+                    "    [dim]Falling back to built-in reference set[/dim]"
+                )
 
     # ── Continue-run mode ─────────────────────────────────────────
     if continue_run is not None or continue_last:
@@ -306,7 +347,9 @@ def generate(
         else:
             try:
                 run_id = find_latest_run(settings.output_dir)
-                console.print(f"  [dim]Using latest run:[/dim] [bold]{run_id}[/bold]")
+                console.print(
+                    f"  [dim]Using latest run:[/dim] [bold]{run_id}[/bold]"
+                )
             except FileNotFoundError as e:
                 console.print(f"[red]Error: {e}[/red]")
                 raise typer.Exit(1)
@@ -317,7 +360,11 @@ def generate(
             console.print(f"[red]Error: {e}[/red]")
             raise typer.Exit(1)
 
-        iter_label = "auto" if auto else str(iterations or settings.refinement_iterations)
+        iter_label = (
+            "auto"
+            if auto
+            else str(iterations or settings.refinement_iterations)
+        )
         console.print(
             Panel.fit(
                 f"[bold]PaperBanana[/bold] - Continuing Run\n\n"
@@ -343,7 +390,7 @@ def generate(
                     label += " (auto)"
                 console.print(
                     f"  [dim]●[/dim] Generating image (iter {event.iteration})...",
-                    end="",
+                    end="",  # noqa: E501
                 )
             elif event.stage == PipelineProgressStage.VISUALIZER_END:
                 console.print(
@@ -366,7 +413,9 @@ def generate(
                         f"[dim]{extra.get('summary', '')}[/dim]"
                     )
                 else:
-                    console.print("    [green]✓[/green] [bold green]Critic satisfied[/bold green]")
+                    console.print(
+                        "    [green]✓[/green] [bold green]Critic satisfied[/bold green]"
+                    )  # noqa: E501
 
         async def _run_continue():
             pipeline = PaperBananaPipeline(settings=settings)
@@ -379,7 +428,9 @@ def generate(
 
         result = asyncio.run(_run_continue())
 
-        console.print(f"\n[green]Done![/green] Output saved to: [bold]{result.image_path}[/bold]")
+        console.print(
+            f"\n[green]Done![/green] Output saved to: [bold]{result.image_path}[/bold]"
+        )  # noqa: E501
         console.print(f"Run ID: {result.metadata.get('run_id', 'unknown')}")
         console.print(f"New iterations: {len(result.iterations)}")
         return
@@ -401,7 +452,9 @@ def generate(
     from paperbanana.core.source_loader import load_methodology_source
 
     try:
-        source_context = load_methodology_source(input_path, pdf_pages=pdf_pages)
+        source_context = load_methodology_source(
+            input_path, pdf_pages=pdf_pages
+        )
     except ImportError as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
@@ -418,7 +471,9 @@ def generate(
     )
 
     # Determine expected output file extension based on settings.output_format
-    output_ext = "jpg" if settings.output_format == "jpeg" else settings.output_format
+    output_ext = (
+        "jpg" if settings.output_format == "jpeg" else settings.output_format
+    )
 
     if cost_only:
         from paperbanana.core.cost_estimator import estimate_cost
@@ -433,15 +488,17 @@ def generate(
             "[bold]PaperBanana[/bold] - Cost Estimate\n",
             f"VLM: {settings.vlm_provider} / {settings.effective_vlm_model}",
             f"Image: {settings.image_provider} / {settings.effective_image_model}",
-            f"Iterations: {iter_est}",
+            f"Iterations: {iter_est}",  # noqa: E501
             f"Optimize: {'yes' if settings.optimize_inputs else 'no'}",
             "",
             f"Estimated VLM calls: {estimate['vlm_calls']}",
             f"Estimated image calls: {estimate['image_calls']}",
             f"[bold]Estimated cost: ${estimate['estimated_total_usd']:.4f}[/bold]",
-        ]
+        ]  # noqa: E501
         if estimate.get("pricing_note"):
-            lines.append(f"\n[yellow]Note: {estimate['pricing_note']}[/yellow]")
+            lines.append(
+                f"\n[yellow]Note: {estimate['pricing_note']}[/yellow]"
+            )
         console.print(Panel.fit("\n".join(lines), border_style="green"))
         return
 
@@ -449,11 +506,15 @@ def generate(
         expected_output = (
             Path(output)
             if output
-            else Path(settings.output_dir) / generate_run_id() / f"final_output.{output_ext}"
+            else Path(settings.output_dir)
+            / generate_run_id()
+            / f"final_output.{output_ext}"
         )
         pdf_note = ""
         if input_path.suffix.lower() == ".pdf":
-            pdf_note = f"\nPDF pages: {pdf_pages.strip() if pdf_pages else 'all'}"
+            pdf_note = (
+                f"\nPDF pages: {pdf_pages.strip() if pdf_pages else 'all'}"
+            )
         console.print(
             Panel.fit(
                 "[bold]PaperBanana[/bold] - Dry Run\n\n"
@@ -476,9 +537,9 @@ def generate(
         console.print(
             Panel.fit(
                 f"[bold]PaperBanana[/bold] - Generating Methodology Diagram\n\n"
-                f"VLM: {settings.vlm_provider} / {settings.effective_vlm_model}\n"
-                f"Image: {settings.image_provider} / {settings.effective_image_model}\n"
-                f"Iterations: {iter_label}",
+                f"VLM: {settings.vlm_provider} / {settings.effective_vlm_model}\n"  # noqa: E501
+                f"Image: {settings.image_provider} / {settings.effective_image_model}\n"  # noqa: E501
+                f"Iterations: {iter_label}",  # noqa: E501
                 border_style="blue",
             )
         )
@@ -510,12 +571,14 @@ def generate(
             )
             console.print(
                 "  [dim]  paperbanana data download --curated   # or --auto-download-data[/dim]"
-            )
+            )  # noqa: E501
 
         def on_progress(event: PipelineProgressEvent) -> None:
             if event.stage == PipelineProgressStage.OPTIMIZER_START:
                 console.print("[bold]Phase 0[/bold] — Input Optimization")
-                console.print("  [dim]●[/dim] Optimizing inputs (parallel)...", end="")
+                console.print(
+                    "  [dim]●[/dim] Optimizing inputs (parallel)...", end=""
+                )
             elif event.stage == PipelineProgressStage.OPTIMIZER_END:
                 console.print(
                     f" [green]✓[/green] [dim]{event.seconds:.1f}s[/dim]"
@@ -530,7 +593,7 @@ def generate(
                 n = extra.get("examples_count", 0)
                 console.print(
                     f" [green]✓[/green] [dim]{event.seconds:.1f}s ({n} examples)[/dim]"
-                    if event.seconds is not None
+                    if event.seconds is not None  # noqa: E501
                     else f" [green]✓[/green] [dim]({n} examples)[/dim]"
                 )
             elif event.stage == PipelineProgressStage.PLANNER_START:
@@ -538,7 +601,11 @@ def generate(
             elif event.stage == PipelineProgressStage.PLANNER_END:
                 extra = event.extra or {}
                 ratio = extra.get("recommended_ratio")
-                info = f"{event.seconds:.1f}s" if event.seconds is not None else ""
+                info = (
+                    f"{event.seconds:.1f}s"
+                    if event.seconds is not None
+                    else ""
+                )
                 if ratio:
                     info += f", ratio={ratio}"
                 console.print(f" [green]✓[/green] [dim]{info}[/dim]")
@@ -552,7 +619,9 @@ def generate(
                 )
             elif event.stage == PipelineProgressStage.VISUALIZER_START:
                 if event.iteration == 1:
-                    console.print("[bold]Phase 2[/bold] — Iterative Refinement")
+                    console.print(
+                        "[bold]Phase 2[/bold] — Iterative Refinement"
+                    )
                 extra = event.extra or {}
                 total = extra.get("total_iterations", 0)
                 if event.iteration and total:
@@ -561,7 +630,9 @@ def generate(
                     label = str(event.iteration or "")
                 if settings.auto_refine:
                     label += " (auto)"
-                console.print(f"  [dim]●[/dim] Generating image [{label}]...", end="")
+                console.print(
+                    f"  [dim]●[/dim] Generating image [{label}]...", end=""
+                )
             elif event.stage == PipelineProgressStage.VISUALIZER_END:
                 console.print(
                     f" [green]✓[/green] [dim]{event.seconds:.1f}s[/dim]"
@@ -581,7 +652,9 @@ def generate(
                     for s in (extra.get("critic_suggestions") or [])[:3]:
                         console.print(f"    [yellow]↻[/yellow] [dim]{s}[/dim]")
                 else:
-                    console.print("    [green]✓[/green] [bold green]Critic satisfied[/bold green]")
+                    console.print(
+                        "    [green]✓[/green] [bold green]Critic satisfied[/bold green]"
+                    )  # noqa: E501
 
         return await pipeline.generate(
             gen_input,
@@ -596,7 +669,9 @@ def generate(
         f" · {len(result.iterations)} iterations[/dim]\n"
     )
     console.print(f"  Output: [bold]{result.image_path}[/bold]")
-    console.print(f"  Run ID: [dim]{result.metadata.get('run_id', 'unknown')}[/dim]")
+    console.print(
+        f"  Run ID: [dim]{result.metadata.get('run_id', 'unknown')}[/dim]"
+    )
 
     cost_data = result.metadata.get("cost")
     if cost_data:
@@ -613,7 +688,7 @@ def generate(
         elif not cost_data.get("pricing_complete", True):
             console.print(
                 "  [yellow]Note: Some model prices unknown; actual cost may differ[/yellow]"
-            )
+            )  # noqa: E501
 
 
 @app.command()
@@ -623,7 +698,7 @@ def sweep(
         "--input",
         "-i",
         help="Path to methodology text file or PDF (.pdf requires: pip install 'paperbanana[pdf]')",
-    ),
+    ),  # noqa: E501
     caption: str = typer.Option(
         ...,
         "--caption",
@@ -633,15 +708,19 @@ def sweep(
     pdf_pages: Optional[str] = typer.Option(
         None,
         "--pdf-pages",
-        help=("PDF input only: 1-based pages (e.g. '1-5', '3', '1-3,7'); default: all pages"),
+        help=(
+            "PDF input only: 1-based pages (e.g. '1-5', '3', '1-3,7'); default: all pages"
+        ),  # noqa: E501
     ),
     output_dir: str = typer.Option(
         "outputs",
         "--output-dir",
         "-o",
         help="Parent directory for sweep outputs (sweep_<id> will be created here)",
+    ),  # noqa: E501
+    config: Optional[str] = typer.Option(
+        None, "--config", help="Path to config YAML file"
     ),
-    config: Optional[str] = typer.Option(None, "--config", help="Path to config YAML file"),
     vlm_providers: Optional[str] = typer.Option(
         None,
         "--vlm-providers",
@@ -651,17 +730,17 @@ def sweep(
         None,
         "--vlm-models",
         help="Comma-separated VLM models (paired as full cartesian combinations)",
-    ),
+    ),  # noqa: E501
     image_providers: Optional[str] = typer.Option(
         None,
         "--image-providers",
         help="Comma-separated image providers (e.g. google_imagen,openai_imagen)",
-    ),
+    ),  # noqa: E501
     image_models: Optional[str] = typer.Option(
         None,
         "--image-models",
         help="Comma-separated image models (paired as full cartesian combinations)",
-    ),
+    ),  # noqa: E501
     iterations: Optional[str] = typer.Option(
         None,
         "--iterations",
@@ -697,17 +776,21 @@ def sweep(
         False,
         "--auto-download-data",
         help="Auto-download expanded reference set (~257MB) on first run if not cached",
+    ),  # noqa: E501
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show detailed progress"
     ),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed progress"),
 ):
     """Run a parameter sweep for one input and rank generated variants.
 
     Successful variants are ranked by *quality_proxy_score*: max(0, 100 − 12.5 × N) where N is
-    the number of critic suggestions on the **final** refinement iteration. This is a rough
-    proxy for comparing runs, not a substitute for human evaluation.
+    the number of critic suggestions on the **final** refinement iteration. This is a rough  # noqa: E501
+    proxy for comparing runs, not a substitute for human evaluation.  # noqa: E501
     """
     if format not in ("png", "jpeg", "webp"):
-        console.print(f"[red]Error: Format must be png, jpeg, or webp. Got: {format}[/red]")
+        console.print(
+            f"[red]Error: Format must be png, jpeg, or webp. Got: {format}[/red]"
+        )  # noqa: E501
         raise typer.Exit(1)
     if max_variants is not None and max_variants < 1:
         console.print("[red]Error: --max-variants must be >= 1[/red]")
@@ -741,8 +824,12 @@ def sweep(
             vlm_models=parse_csv_values(vlm_models),
             image_providers=parse_csv_values(image_providers),
             image_models=parse_csv_values(image_models),
-            refinement_iterations=parse_csv_ints(iterations, field_name="--iterations"),
-            optimize_inputs=parse_csv_bools(optimize_modes, field_name="--optimize-modes"),
+            refinement_iterations=parse_csv_ints(
+                iterations, field_name="--iterations"
+            ),
+            optimize_inputs=parse_csv_bools(
+                optimize_modes, field_name="--optimize-modes"
+            ),
             auto_refine=parse_csv_bools(auto_modes, field_name="--auto-modes"),
             max_variants=max_variants,
         )
@@ -755,7 +842,9 @@ def sweep(
         raise typer.Exit(1)
 
     try:
-        source_context = load_methodology_source(input_path, pdf_pages=pdf_pages)
+        source_context = load_methodology_source(
+            input_path, pdf_pages=pdf_pages
+        )
     except (ImportError, ValueError) as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
@@ -775,7 +864,10 @@ def sweep(
     )
 
     if dry_run:
-        preview = [variant.as_dict() for variant in variant_list[: min(10, len(variant_list))]]
+        preview = [
+            variant.as_dict()
+            for variant in variant_list[: min(10, len(variant_list))]
+        ]
         report = {
             "sweep_id": sweep_id,
             "status": "dry_run",
@@ -784,7 +876,9 @@ def sweep(
         }
         report_path = sweep_dir / "sweep_report.json"
         save_json(report, report_path)
-        console.print(f"\n[green]Dry run complete.[/green] Planned {len(variant_list)} variants")
+        console.print(
+            f"\n[green]Dry run complete.[/green] Planned {len(variant_list)} variants"
+        )  # noqa: E501
         console.print(f"  Report: [bold]{report_path}[/bold]")
         return
 
@@ -804,7 +898,9 @@ def sweep(
             try:
                 dm.download()
             except Exception as e:
-                console.print(f"  [yellow]Download failed: {e}, using built-in set[/yellow]")
+                console.print(
+                    f"  [yellow]Download failed: {e}, using built-in set[/yellow]"
+                )  # noqa: E501
 
     all_results: list[dict] = []
     total_start = time.perf_counter()
@@ -832,15 +928,21 @@ def sweep(
             communicative_intent=caption,
             diagram_type=DiagramType.METHODOLOGY,
         )
-        console.print(f"[bold]Variant {idx}/{len(variant_list)}[/bold] — {variant.variant_id}")
+        console.print(
+            f"[bold]Variant {idx}/{len(variant_list)}[/bold] — {variant.variant_id}"
+        )  # noqa: E501
 
         try:
             variant_start = time.perf_counter()
             pipeline = PaperBananaPipeline(settings=settings)
             result = asyncio.run(pipeline.generate(gen_input))
             variant_seconds = time.perf_counter() - variant_start
-            final_critique = result.iterations[-1].critique if result.iterations else None
-            suggestion_count = len(final_critique.critic_suggestions) if final_critique else 0
+            final_critique = (
+                result.iterations[-1].critique if result.iterations else None
+            )
+            suggestion_count = (
+                len(final_critique.critic_suggestions) if final_critique else 0
+            )
             quality_proxy = quality_proxy_score(suggestion_count)
             all_results.append(
                 {
@@ -856,7 +958,7 @@ def sweep(
             )
             console.print(
                 f"  [green]✓[/green] score={quality_proxy:.1f} [dim]{variant_seconds:.1f}s[/dim]"
-            )
+            )  # noqa: E501
         except Exception as e:
             all_results.append(
                 {
@@ -882,7 +984,7 @@ def sweep(
         "ranked_results": ranked_results,
         "quality_proxy_note": (
             "quality_proxy_score = max(0, 100 - 12.5 * N) where N is critic suggestion "
-            "count on the final iteration"
+            "count on the final iteration"  # noqa: E501
         ),
     }
     report_path = sweep_dir / "sweep_report.json"
@@ -911,14 +1013,22 @@ def batch(
         "--output-dir",
         "-o",
         help="Parent directory for batch run (batch_<id> will be created here)",
+    ),  # noqa: E501
+    config: Optional[str] = typer.Option(
+        None, "--config", help="Path to config YAML file"
     ),
-    config: Optional[str] = typer.Option(None, "--config", help="Path to config YAML file"),
-    vlm_provider: Optional[str] = typer.Option(None, "--vlm-provider", help="VLM provider"),
-    vlm_model: Optional[str] = typer.Option(None, "--vlm-model", help="VLM model name"),
+    vlm_provider: Optional[str] = typer.Option(
+        None, "--vlm-provider", help="VLM provider"
+    ),
+    vlm_model: Optional[str] = typer.Option(
+        None, "--vlm-model", help="VLM model name"
+    ),
     image_provider: Optional[str] = typer.Option(
         None, "--image-provider", help="Image gen provider"
     ),
-    image_model: Optional[str] = typer.Option(None, "--image-model", help="Image gen model name"),
+    image_model: Optional[str] = typer.Option(
+        None, "--image-model", help="Image gen model name"
+    ),
     iterations: Optional[int] = typer.Option(
         None, "--iterations", "-n", help="Refinement iterations"
     ),
@@ -943,28 +1053,44 @@ def batch(
         help="Target venue style (neurips, icml, acl, ieee, custom)",
     ),
     auto_download_data: bool = typer.Option(
-        False, "--auto-download-data", help="Auto-download curated expansion if needed"
+        False,
+        "--auto-download-data",
+        help="Auto-download curated expansion if needed",
     ),
     resume_batch: Optional[str] = typer.Option(
         None, "--resume-batch", help="Batch ID or batch directory to resume"
     ),
     retry_failed: bool = typer.Option(
-        False, "--retry-failed", help="Retry previously failed items during resume"
+        False,
+        "--retry-failed",
+        help="Retry previously failed items during resume",
     ),
     max_retries: int = typer.Option(
         0, "--max-retries", help="Extra retries per item after first failure"
     ),
-    concurrency: int = typer.Option(1, "--concurrency", help="Parallel item workers"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed progress"),
+    concurrency: int = typer.Option(
+        1, "--concurrency", help="Parallel item workers"
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show detailed progress"
+    ),
 ):
     """Generate multiple methodology diagrams from a manifest file (YAML or JSON)."""
-    if format not in ("png", "jpeg", "webp"):
-        console.print(f"[red]Error: Format must be png, jpeg, or webp. Got: {format}[/red]")
+    if format not in ("png", "jpeg", "webp"):  # noqa: E501
+        console.print(
+            f"[red]Error: Format must be png, jpeg, or webp. Got: {format}[/red]"
+        )  # noqa: E501
         raise typer.Exit(1)
-    if venue and venue.lower() not in ("neurips", "icml", "acl", "ieee", "custom"):
+    if venue and venue.lower() not in (
+        "neurips",
+        "icml",
+        "acl",
+        "ieee",
+        "custom",
+    ):
         console.print(
             f"[red]Error: --venue must be neurips, icml, acl, ieee, or custom. Got: {venue}[/red]"
-        )
+        )  # noqa: E501
         raise typer.Exit(1)
     if max_retries < 0:
         console.print("[red]Error: --max-retries must be >= 0[/red]")
@@ -1050,12 +1176,14 @@ def batch(
             try:
                 dm.download(dataset="curated")
             except Exception as e:
-                console.print(f"  [yellow]Download failed: {e}, using built-in set[/yellow]")
+                console.print(
+                    f"  [yellow]Download failed: {e}, using built-in set[/yellow]"
+                )  # noqa: E501
 
     console.print(
         Panel.fit(
             f"[bold]PaperBanana[/bold] — {'Resume ' if is_resume else ''}Batch Generation\n\n"
-            f"Manifest: {manifest_path.name}\n"
+            f"Manifest: {manifest_path.name}\n"  # noqa: E501
             f"Items: {len(items)}\n"
             f"Output: {batch_dir}\n"
             f"Concurrency: {concurrency}",
@@ -1083,9 +1211,15 @@ def batch(
     total_start = time.perf_counter()
     planned = select_items_for_run(state, retry_failed=retry_failed)
     if not planned:
-        checkpoint_progress(batch_dir=batch_dir, state=state, mark_complete=True)
-        console.print("[yellow]Nothing to run: all items already completed.[/yellow]")
-        console.print(f"  Report: [bold]{batch_dir / 'batch_report.json'}[/bold]")
+        checkpoint_progress(
+            batch_dir=batch_dir, state=state, mark_complete=True
+        )
+        console.print(
+            "[yellow]Nothing to run: all items already completed.[/yellow]"
+        )
+        console.print(
+            f"  Report: [bold]{batch_dir / 'batch_report.json'}[/bold]"
+        )
         return
 
     async def _run_all() -> None:
@@ -1104,7 +1238,9 @@ def batch(
                     )
                     input_path = Path(str(item["input"]))
                     if not input_path.exists():
-                        mark_item_failure(state, item_key, "input file not found")
+                        mark_item_failure(
+                            state, item_key, "input file not found"
+                        )
                         checkpoint_progress(
                             batch_dir=batch_dir,
                             state=state,
@@ -1112,7 +1248,7 @@ def batch(
                         )
                         console.print(
                             f"[red]Item {idx + 1}/{len(items)} {item_id}: input missing[/red]"
-                        )
+                        )  # noqa: E501
                         return
                     try:
                         source_context = load_methodology_source(
@@ -1123,7 +1259,9 @@ def batch(
                             communicative_intent=str(item["caption"]),
                             diagram_type=DiagramType.METHODOLOGY,
                         )
-                        result = await PaperBananaPipeline(settings=settings).generate(gen_input)
+                        result = await PaperBananaPipeline(
+                            settings=settings
+                        ).generate(gen_input)
                         mark_item_success(
                             state,
                             item_key,
@@ -1138,7 +1276,7 @@ def batch(
                         )
                         console.print(
                             f"[green]Item {idx + 1}/{len(items)} {item_id}: ok[/green] "
-                            f"[dim]{result.image_path}[/dim]"
+                            f"[dim]{result.image_path}[/dim]"  # noqa: E501
                         )
                         return
                     except Exception as e:
@@ -1151,15 +1289,17 @@ def batch(
                         if attempt < max_retries:
                             console.print(
                                 f"[yellow]Item {item_id}: retry {attempt + 1}/{max_retries} "
-                                f"after {e}[/yellow]"
+                                f"after {e}[/yellow]"  # noqa: E501
                             )
                             continue
                         console.print(
                             f"[red]Item {idx + 1}/{len(items)} {item_id}: failed - {e}[/red]"
-                        )
+                        )  # noqa: E501
                         return
 
-        await asyncio.gather(*[_run_one(idx, item) for idx, item, _ in planned])
+        await asyncio.gather(
+            *[_run_one(idx, item) for idx, item, _ in planned]
+        )
 
     asyncio.run(_run_all())
 
@@ -1186,12 +1326,12 @@ def batch_report(
         "--batch-dir",
         "-b",
         help="Path to batch run directory (e.g. outputs/batch_20250109_123456_abc)",
-    ),
+    ),  # noqa: E501
     batch_id: Optional[str] = typer.Option(
         None,
         "--batch-id",
         help="Batch ID (e.g. batch_20250109_123456_abc); resolved under --output-dir",
-    ),
+    ),  # noqa: E501
     output_dir: str = typer.Option(
         "outputs",
         "--output-dir",
@@ -1202,7 +1342,7 @@ def batch_report(
         None,
         "--output",
         help="Output path for the report file (default: <batch_dir>/batch_report.<md|html>)",
-    ),
+    ),  # noqa: E501
     format: str = typer.Option(
         "markdown",
         "--format",
@@ -1211,14 +1351,20 @@ def batch_report(
     ),
 ):
     """Generate a human-readable report from an existing batch run (batch_report.json)."""
-    if format not in ("markdown", "html", "md"):
-        console.print(f"[red]Error: Format must be markdown or html. Got: {format}[/red]")
+    if format not in ("markdown", "html", "md"):  # noqa: E501
+        console.print(
+            f"[red]Error: Format must be markdown or html. Got: {format}[/red]"
+        )
         raise typer.Exit(1)
     if batch_dir is None and batch_id is None:
-        console.print("[red]Error: Provide either --batch-dir or --batch-id[/red]")
+        console.print(
+            "[red]Error: Provide either --batch-dir or --batch-id[/red]"
+        )
         raise typer.Exit(1)
     if batch_dir is not None and batch_id is not None:
-        console.print("[red]Error: Provide only one of --batch-dir or --batch-id[/red]")
+        console.print(
+            "[red]Error: Provide only one of --batch-dir or --batch-id[/red]"
+        )
         raise typer.Exit(1)
 
     from paperbanana.core.batch import write_batch_report
@@ -1232,7 +1378,9 @@ def batch_report(
     fmt = "markdown" if format == "md" else format
     try:
         written = write_batch_report(path, output_path=output_path, format=fmt)
-        console.print(f"[green]Report written to:[/green] [bold]{written}[/bold]")
+        console.print(
+            f"[green]Report written to:[/green] [bold]{written}[/bold]"
+        )
     except FileNotFoundError as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
@@ -1244,34 +1392,47 @@ def batch_report(
 @app.command("plot-batch")
 def plot_batch(
     manifest: str = typer.Option(
-        ..., "--manifest", "-m", help="Path to plot batch manifest (YAML or JSON)"
+        ...,
+        "--manifest",
+        "-m",
+        help="Path to plot batch manifest (YAML or JSON)",
     ),
     output_dir: str = typer.Option(
         "outputs",
         "--output-dir",
         "-o",
         help="Parent directory for batch run (batch_<id> will be created here)",
+    ),  # noqa: E501
+    config: Optional[str] = typer.Option(
+        None, "--config", help="Path to config YAML file"
     ),
-    config: Optional[str] = typer.Option(None, "--config", help="Path to config YAML file"),
     vlm_provider: Optional[str] = typer.Option(
         None, "--vlm-provider", help="VLM provider (default: gemini)"
     ),
-    vlm_model: Optional[str] = typer.Option(None, "--vlm-model", help="VLM model name"),
+    vlm_model: Optional[str] = typer.Option(
+        None, "--vlm-model", help="VLM model name"
+    ),
     image_provider: Optional[str] = typer.Option(
         None, "--image-provider", help="Image gen provider"
     ),
-    image_model: Optional[str] = typer.Option(None, "--image-model", help="Image gen model name"),
+    image_model: Optional[str] = typer.Option(
+        None, "--image-model", help="Image gen model name"
+    ),
     iterations: Optional[int] = typer.Option(
         None, "--iterations", "-n", help="Refinement iterations per plot"
     ),
     auto: bool = typer.Option(
-        False, "--auto", help="Loop until critic satisfied per item (with safety cap)"
+        False,
+        "--auto",
+        help="Loop until critic satisfied per item (with safety cap)",
     ),
     max_iterations: Optional[int] = typer.Option(
         None, "--max-iterations", help="Safety cap for --auto"
     ),
     optimize: bool = typer.Option(
-        False, "--optimize", help="Preprocess inputs per item (enrich context, sharpen intent)"
+        False,
+        "--optimize",
+        help="Preprocess inputs per item (enrich context, sharpen intent)",
     ),
     format: str = typer.Option(
         "png", "--format", "-f", help="Output image format (png, jpeg, webp)"
@@ -1296,22 +1457,36 @@ def plot_batch(
         None, "--resume-batch", help="Batch ID or batch directory to resume"
     ),
     retry_failed: bool = typer.Option(
-        False, "--retry-failed", help="Retry previously failed items during resume"
+        False,
+        "--retry-failed",
+        help="Retry previously failed items during resume",
     ),
     max_retries: int = typer.Option(
         0, "--max-retries", help="Extra retries per item after first failure"
     ),
-    concurrency: int = typer.Option(1, "--concurrency", help="Parallel item workers"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed progress"),
+    concurrency: int = typer.Option(
+        1, "--concurrency", help="Parallel item workers"
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show detailed progress"
+    ),
 ):
     """Generate multiple statistical plots from a manifest (data + intent per item)."""
-    if format not in ("png", "jpeg", "webp"):
-        console.print(f"[red]Error: Format must be png, jpeg, or webp. Got: {format}[/red]")
+    if format not in ("png", "jpeg", "webp"):  # noqa: E501
+        console.print(
+            f"[red]Error: Format must be png, jpeg, or webp. Got: {format}[/red]"
+        )  # noqa: E501
         raise typer.Exit(1)
-    if venue and venue.lower() not in ("neurips", "icml", "acl", "ieee", "custom"):
+    if venue and venue.lower() not in (
+        "neurips",
+        "icml",
+        "acl",
+        "ieee",
+        "custom",
+    ):
         console.print(
             f"[red]Error: --venue must be neurips, icml, acl, ieee, or custom. Got: {venue}[/red]"
-        )
+        )  # noqa: E501
         raise typer.Exit(1)
     if max_retries < 0:
         console.print("[red]Error: --max-retries must be >= 0[/red]")
@@ -1394,7 +1569,7 @@ def plot_batch(
     console.print(
         Panel.fit(
             f"[bold]PaperBanana[/bold] — {'Resume ' if is_resume else ''}Batch Plot Generation\n\n"
-            f"Manifest: {manifest_path.name}\n"
+            f"Manifest: {manifest_path.name}\n"  # noqa: E501
             f"Items: {len(items)}\n"
             f"Output: {batch_dir}\n"
             f"Concurrency: {concurrency}",
@@ -1420,9 +1595,15 @@ def plot_batch(
     total_start = time.perf_counter()
     planned = select_items_for_run(state, retry_failed=retry_failed)
     if not planned:
-        checkpoint_progress(batch_dir=batch_dir, state=state, mark_complete=True)
-        console.print("[yellow]Nothing to run: all items already completed.[/yellow]")
-        console.print(f"  Report: [bold]{batch_dir / 'batch_report.json'}[/bold]")
+        checkpoint_progress(
+            batch_dir=batch_dir, state=state, mark_complete=True
+        )
+        console.print(
+            "[yellow]Nothing to run: all items already completed.[/yellow]"
+        )
+        console.print(
+            f"  Report: [bold]{batch_dir / 'batch_report.json'}[/bold]"
+        )
         return
 
     async def _run_all() -> None:
@@ -1441,7 +1622,9 @@ def plot_batch(
                     )
                     data_path = Path(str(item["data"]))
                     if not data_path.exists():
-                        mark_item_failure(state, item_key, "data file not found")
+                        mark_item_failure(
+                            state, item_key, "data file not found"
+                        )
                         checkpoint_progress(
                             batch_dir=batch_dir,
                             state=state,
@@ -1449,10 +1632,12 @@ def plot_batch(
                         )
                         console.print(
                             f"[red]Item {idx + 1}/{len(items)} {item_id}: data missing[/red]"
-                        )
+                        )  # noqa: E501
                         return
                     try:
-                        source_context, raw_data = load_statistical_plot_payload(data_path)
+                        source_context, raw_data = (
+                            load_statistical_plot_payload(data_path)
+                        )
                         ar = item.get("aspect_ratio") or aspect_ratio
                         gen_input = GenerationInput(
                             source_context=source_context,
@@ -1461,7 +1646,9 @@ def plot_batch(
                             raw_data={"data": raw_data},
                             aspect_ratio=ar,
                         )
-                        result = await PaperBananaPipeline(settings=settings).generate(gen_input)
+                        result = await PaperBananaPipeline(
+                            settings=settings
+                        ).generate(gen_input)
                         mark_item_success(
                             state,
                             item_key,
@@ -1476,7 +1663,7 @@ def plot_batch(
                         )
                         console.print(
                             f"[green]Item {idx + 1}/{len(items)} {item_id}: ok[/green] "
-                            f"[dim]{result.image_path}[/dim]"
+                            f"[dim]{result.image_path}[/dim]"  # noqa: E501
                         )
                         return
                     except Exception as e:
@@ -1489,15 +1676,17 @@ def plot_batch(
                         if attempt < max_retries:
                             console.print(
                                 f"[yellow]Item {item_id}: retry {attempt + 1}/{max_retries} "
-                                f"after {e}[/yellow]"
+                                f"after {e}[/yellow]"  # noqa: E501
                             )
                             continue
                         console.print(
                             f"[red]Item {idx + 1}/{len(items)} {item_id}: failed - {e}[/red]"
-                        )
+                        )  # noqa: E501
                         return
 
-        await asyncio.gather(*[_run_one(idx, item) for idx, item, _ in planned])
+        await asyncio.gather(
+            *[_run_one(idx, item) for idx, item, _ in planned]
+        )
 
     asyncio.run(_run_all())
 
@@ -1519,11 +1708,21 @@ def plot_batch(
 
 @app.command()
 def plot(
-    data: str = typer.Option(..., "--data", "-d", help="Path to data file (CSV or JSON)"),
-    intent: str = typer.Option(..., "--intent", help="Communicative intent for the plot"),
-    output: Optional[str] = typer.Option(None, "--output", "-o", help="Output image path"),
-    vlm_provider: str = typer.Option("gemini", "--vlm-provider", help="VLM provider"),
-    iterations: int = typer.Option(3, "--iterations", "-n", help="Number of refinement iterations"),
+    data: str = typer.Option(
+        ..., "--data", "-d", help="Path to data file (CSV or JSON)"
+    ),
+    intent: str = typer.Option(
+        ..., "--intent", help="Communicative intent for the plot"
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output image path"
+    ),
+    vlm_provider: str = typer.Option(
+        "gemini", "--vlm-provider", help="VLM provider"
+    ),
+    iterations: int = typer.Option(
+        3, "--iterations", "-n", help="Number of refinement iterations"
+    ),
     format: str = typer.Option(
         "png",
         "--format",
@@ -1531,7 +1730,10 @@ def plot(
         help="Output image format (png, jpeg, or webp)",
     ),
     verbose: bool = typer.Option(
-        False, "--verbose", "-v", help="Show detailed agent progress and timing"
+        False,
+        "--verbose",
+        "-v",
+        help="Show detailed agent progress and timing",
     ),
     aspect_ratio: Optional[str] = typer.Option(
         None,
@@ -1540,10 +1742,14 @@ def plot(
         help="Target aspect ratio: 1:1, 2:3, 3:2, 3:4, 4:3, 9:16, 16:9, 21:9",
     ),
     optimize: bool = typer.Option(
-        False, "--optimize", help="Enrich context and sharpen caption before generation"
+        False,
+        "--optimize",
+        help="Enrich context and sharpen caption before generation",
     ),
     auto: bool = typer.Option(
-        False, "--auto", help="Let critic loop until satisfied (max 30 iterations)"
+        False,
+        "--auto",
+        help="Let critic loop until satisfied (max 30 iterations)",
     ),
     save_prompts: Optional[bool] = typer.Option(
         None,
@@ -1568,12 +1774,20 @@ def plot(
 ):
     """Generate a statistical plot from data."""
     if format not in ("png", "jpeg", "webp"):
-        console.print(f"[red]Error: Format must be png, jpeg, or webp. Got: {format}[/red]")
+        console.print(
+            f"[red]Error: Format must be png, jpeg, or webp. Got: {format}[/red]"
+        )  # noqa: E501
         raise typer.Exit(1)
-    if venue and venue.lower() not in ("neurips", "icml", "acl", "ieee", "custom"):
+    if venue and venue.lower() not in (
+        "neurips",
+        "icml",
+        "acl",
+        "ieee",
+        "custom",
+    ):
         console.print(
             f"[red]Error: --venue must be neurips, icml, acl, ieee, or custom. Got: {venue}[/red]"
-        )
+        )  # noqa: E501
         raise typer.Exit(1)
 
     configure_logging(verbose=verbose)
@@ -1629,9 +1843,11 @@ def plot(
             "",
             f"Estimated VLM calls: {estimate['vlm_calls']}",
             f"[bold]Estimated cost: ${estimate['estimated_total_usd']:.4f}[/bold]",
-        ]
+        ]  # noqa: E501
         if estimate.get("pricing_note"):
-            lines.append(f"\n[yellow]Note: {estimate['pricing_note']}[/yellow]")
+            lines.append(
+                f"\n[yellow]Note: {estimate['pricing_note']}[/yellow]"
+            )
         console.print(Panel.fit("\n".join(lines), border_style="green"))
         return
 
@@ -1651,7 +1867,9 @@ def plot(
         return await pipeline.generate(gen_input)
 
     result = asyncio.run(_run())
-    console.print(f"\n[green]Done![/green] Plot saved to: [bold]{result.image_path}[/bold]")
+    console.print(
+        f"\n[green]Done![/green] Plot saved to: [bold]{result.image_path}[/bold]"
+    )  # noqa: E501
 
     cost_data = result.metadata.get("cost")
     if cost_data:
@@ -1664,7 +1882,7 @@ def plot(
 @app.command()
 def setup():
     """Interactive setup wizard — get generating in 2 minutes with FREE APIs."""
-    console.print(
+    console.print(  # noqa: E501
         Panel.fit(
             "[bold]Welcome to PaperBanana Setup[/bold]\n\n"
             "We'll set up FREE API keys so you can start generating diagrams.",
@@ -1682,8 +1900,12 @@ def setup():
     # Save to .env
     env_path = Path(".env")
     if use_official_api == "y":
-        console.print("Using official Google AI Studio endpoint (free, no credit card).")
-        console.print("This powers the AI agents that plan and critique your diagrams.\n")
+        console.print(
+            "Using official Google AI Studio endpoint (free, no credit card)."
+        )
+        console.print(
+            "This powers the AI agents that plan and critique your diagrams.\n"
+        )
 
         import webbrowser
 
@@ -1706,7 +1928,9 @@ def setup():
         while not google_base_url.strip():
             google_base_url = Prompt.ask("Gemini base URL")
             if not google_base_url.strip():
-                console.print("[red]URL cannot be empty. Please try again.[/red]")
+                console.print(
+                    "[red]URL cannot be empty. Please try again.[/red]"
+                )
 
         gemini_key = Prompt.ask("Paste your Gemini API key")
         env_updates = {
@@ -1716,7 +1940,9 @@ def setup():
 
     _upsert_env_vars(env_path, env_updates)
 
-    console.print(f"\n[green]Setup complete![/green] Configuration saved to {env_path}")
+    console.print(
+        f"\n[green]Setup complete![/green] Configuration saved to {env_path}"
+    )
     console.print("\nTry it out:")
     console.print(
         "  [bold]paperbanana generate --input method.txt"
@@ -1726,15 +1952,24 @@ def setup():
 
 @app.command()
 def evaluate(
-    generated: str = typer.Option(..., "--generated", "-g", help="Path to generated image"),
-    context: str = typer.Option(..., "--context", help="Path to source context text file or PDF"),
+    generated: str = typer.Option(
+        ..., "--generated", "-g", help="Path to generated image"
+    ),
+    context: str = typer.Option(
+        ..., "--context", help="Path to source context text file or PDF"
+    ),
     caption: str = typer.Option(..., "--caption", "-c", help="Figure caption"),
-    reference: str = typer.Option(..., "--reference", "-r", help="Path to human reference image"),
+    reference: str = typer.Option(
+        ..., "--reference", "-r", help="Path to human reference image"
+    ),
     vlm_provider: str = typer.Option(
         "gemini", "--vlm-provider", help="VLM provider for evaluation"
     ),
     verbose: bool = typer.Option(
-        False, "--verbose", "-v", help="Show detailed agent progress and timing"
+        False,
+        "--verbose",
+        "-v",
+        help="Show detailed agent progress and timing",
     ),
     pdf_pages: Optional[str] = typer.Option(
         None,
@@ -1749,12 +1984,16 @@ def evaluate(
 
     generated_path = Path(generated)
     if not generated_path.exists():
-        console.print(f"[red]Error: Generated image not found: {generated}[/red]")
+        console.print(
+            f"[red]Error: Generated image not found: {generated}[/red]"
+        )
         raise typer.Exit(1)
 
     reference_path = Path(reference)
     if not reference_path.exists():
-        console.print(f"[red]Error: Reference image not found: {reference}[/red]")
+        console.print(
+            f"[red]Error: Reference image not found: {reference}[/red]"
+        )
         raise typer.Exit(1)
 
     context_path = Path(context)
@@ -1765,7 +2004,9 @@ def evaluate(
     from paperbanana.core.source_loader import load_methodology_source
 
     try:
-        context_text = load_methodology_source(context_path, pdf_pages=pdf_pages)
+        context_text = load_methodology_source(
+            context_path, pdf_pages=pdf_pages
+        )
     except ImportError as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
@@ -1827,7 +2068,9 @@ def ablate_retrieval(
         ..., "--caption", "-c", help="Figure caption / communicative intent"
     ),
     exemplar_endpoint: str = typer.Option(
-        ..., "--exemplar-endpoint", help="External exemplar retrieval endpoint URL"
+        ...,
+        "--exemplar-endpoint",
+        help="External exemplar retrieval endpoint URL",
     ),
     top_k: str = typer.Option(
         "1,3,5", "--top-k", help="Comma-separated top-k values (e.g., 1,3,5)"
@@ -1841,7 +2084,7 @@ def ablate_retrieval(
         None,
         "--exemplar-retries",
         help="Retry attempts for external exemplar retrieval on transient errors",
-    ),
+    ),  # noqa: E501
     reference: Optional[str] = typer.Option(
         None,
         "--reference",
@@ -1853,16 +2096,23 @@ def ablate_retrieval(
         "--output-report",
         "-o",
         help="Output JSON report path (default: outputs/retrieval_ablation_<runid>.json)",
+    ),  # noqa: E501
+    config: Optional[str] = typer.Option(
+        None, "--config", help="Path to config YAML file"
     ),
-    config: Optional[str] = typer.Option(None, "--config", help="Path to config YAML file"),
     vlm_provider: Optional[str] = typer.Option(
-        None, "--vlm-provider", help="VLM provider override for generation and judge"
+        None,
+        "--vlm-provider",
+        help="VLM provider override for generation and judge",
     ),
     image_provider: Optional[str] = typer.Option(
         None, "--image-provider", help="Image generation provider override"
     ),
     verbose: bool = typer.Option(
-        False, "--verbose", "-v", help="Show detailed agent progress and timing"
+        False,
+        "--verbose",
+        "-v",
+        help="Show detailed agent progress and timing",
     ),
     pdf_pages: Optional[str] = typer.Option(
         None,
@@ -1882,7 +2132,9 @@ def ablate_retrieval(
     if reference:
         reference_path = Path(reference)
         if not reference_path.exists():
-            console.print(f"[red]Error: Reference image not found: {reference}[/red]")
+            console.print(
+                f"[red]Error: Reference image not found: {reference}[/red]"
+            )
             raise typer.Exit(1)
 
     from dotenv import load_dotenv
@@ -1923,7 +2175,9 @@ def ablate_retrieval(
     from paperbanana.core.source_loader import load_methodology_source
 
     try:
-        source_context = load_methodology_source(input_path, pdf_pages=pdf_pages)
+        source_context = load_methodology_source(
+            input_path, pdf_pages=pdf_pages
+        )
     except ImportError as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
@@ -1958,7 +2212,10 @@ def ablate_retrieval(
 
     report = asyncio.run(_run())
 
-    default_report_path = Path(settings.output_dir) / f"retrieval_ablation_{generate_run_id()}.json"
+    default_report_path = (
+        Path(settings.output_dir)
+        / f"retrieval_ablation_{generate_run_id()}.json"
+    )
     report_path = Path(output_report) if output_report else default_report_path
     saved_path = runner.save_report(report, report_path)
 
@@ -1967,7 +2224,7 @@ def ablate_retrieval(
     if summary.get("best_human_preference_variant") is not None:
         human_pref_line = (
             f"Best human preference: {summary.get('best_human_preference_variant')} "
-            f"({summary.get('best_human_preference_score')})\n"
+            f"({summary.get('best_human_preference_score')})\n"  # noqa: E501
         )
     console.print(
         Panel.fit(
@@ -1988,31 +2245,51 @@ def ablate_retrieval(
 @app.command("ablate-prompts")
 def ablate_prompts(
     variant_prompt_dir: str = typer.Option(
-        ..., "--variant-dir", help="Path to the variant prompt templates directory"
+        ...,
+        "--variant-dir",
+        help="Path to the variant prompt templates directory",
     ),
     baseline_prompt_dir: Optional[str] = typer.Option(
-        None, "--baseline-dir", help="Path to baseline prompt templates (default: built-in prompts)"
+        None,
+        "--baseline-dir",
+        help="Path to baseline prompt templates (default: built-in prompts)",
     ),
-    variant_name: str = typer.Option("variant", "--variant-name", help="Label for the variant"),
-    baseline_name: str = typer.Option("baseline", "--baseline-name", help="Label for the baseline"),
+    variant_name: str = typer.Option(
+        "variant", "--variant-name", help="Label for the variant"
+    ),
+    baseline_name: str = typer.Option(
+        "baseline", "--baseline-name", help="Label for the baseline"
+    ),
     category: Optional[str] = typer.Option(
         None, "--category", help="Only run entries in this category"
     ),
-    ids: Optional[str] = typer.Option(None, "--ids", help="Comma-separated entry IDs to compare"),
-    limit: Optional[int] = typer.Option(None, "--limit", help="Max entries to compare"),
-    seed: Optional[int] = typer.Option(None, "--seed", help="Random seed for reproducibility"),
+    ids: Optional[str] = typer.Option(
+        None, "--ids", help="Comma-separated entry IDs to compare"
+    ),
+    limit: Optional[int] = typer.Option(
+        None, "--limit", help="Max entries to compare"
+    ),
+    seed: Optional[int] = typer.Option(
+        None, "--seed", help="Random seed for reproducibility"
+    ),
     output_report: Optional[str] = typer.Option(
         None, "--output-report", "-o", help="Output JSON report path"
     ),
-    config: Optional[str] = typer.Option(None, "--config", help="Path to config YAML file"),
-    vlm_provider: Optional[str] = typer.Option(None, "--vlm-provider", help="VLM provider"),
+    config: Optional[str] = typer.Option(
+        None, "--config", help="Path to config YAML file"
+    ),
+    vlm_provider: Optional[str] = typer.Option(
+        None, "--vlm-provider", help="VLM provider"
+    ),
     image_provider: Optional[str] = typer.Option(
         None, "--image-provider", help="Image generation provider"
     ),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed progress"),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show detailed progress"
+    ),
 ):
     """Run A/B comparison of two prompt configurations and produce a scored report."""
-    configure_logging(verbose=verbose)
+    configure_logging(verbose=verbose)  # noqa: E501
 
     from dotenv import load_dotenv
 
@@ -2064,8 +2341,12 @@ def ablate_prompts(
         store = ReferenceStore.from_settings(settings)
         examples = store.get_all()
         if not examples:
-            raise ValueError("No benchmark entries found. Run 'paperbanana data download' first.")
-        entries = filter_examples(examples, category=category, ids=id_list, limit=limit)
+            raise ValueError(
+                "No benchmark entries found. Run 'paperbanana data download' first."
+            )  # noqa: E501
+        entries = filter_examples(
+            examples, category=category, ids=id_list, limit=limit
+        )
     except ValueError as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
@@ -2087,7 +2368,9 @@ def ablate_prompts(
 
     report = asyncio.run(runner.run(entries))
 
-    default_path = Path(settings.output_dir) / f"prompt_ablation_{generate_run_id()}.json"
+    default_path = (
+        Path(settings.output_dir) / f"prompt_ablation_{generate_run_id()}.json"
+    )
     report_path = Path(output_report) if output_report else default_path
     saved_path = PromptAblationRunner.save_report(report, report_path)
 
@@ -2116,7 +2399,8 @@ def ablate_prompts(
             f"Mean baseline:    {summary.get('mean_baseline_score', 0)}/100\n"
             f"Mean variant:     {summary.get('mean_variant_score', 0)}/100\n"
             f"Mean delta:       {summary.get('mean_overall_delta', 0):+.1f}\n\n"
-            "[bold]Per-dimension deltas (variant - baseline):[/bold]\n" + "\n".join(delta_lines),
+            "[bold]Per-dimension deltas (variant - baseline):[/bold]\n"  # noqa: E501
+            + "\n".join(delta_lines),
             border_style="cyan",
         )
     )
@@ -2126,28 +2410,44 @@ def ablate_prompts(
 
 @app.command()
 def benchmark(
-    config: Optional[str] = typer.Option(None, "--config", help="Path to config YAML file"),
+    config: Optional[str] = typer.Option(
+        None, "--config", help="Path to config YAML file"
+    ),
     output_dir: Optional[str] = typer.Option(
         None, "--output-dir", "-o", help="Output directory for benchmark run"
     ),
-    vlm_provider: Optional[str] = typer.Option(None, "--vlm-provider", help="VLM provider"),
-    vlm_model: Optional[str] = typer.Option(None, "--vlm-model", help="VLM model name"),
+    vlm_provider: Optional[str] = typer.Option(
+        None, "--vlm-provider", help="VLM provider"
+    ),
+    vlm_model: Optional[str] = typer.Option(
+        None, "--vlm-model", help="VLM model name"
+    ),
     image_provider: Optional[str] = typer.Option(
         None, "--image-provider", help="Image gen provider"
     ),
-    image_model: Optional[str] = typer.Option(None, "--image-model", help="Image gen model name"),
+    image_model: Optional[str] = typer.Option(
+        None, "--image-model", help="Image gen model name"
+    ),
     iterations: Optional[int] = typer.Option(
         None, "--iterations", "-n", help="Refinement iterations per entry"
     ),
-    auto: bool = typer.Option(False, "--auto", help="Loop until critic satisfied per entry"),
-    optimize: bool = typer.Option(False, "--optimize", help="Preprocess inputs per entry"),
+    auto: bool = typer.Option(
+        False, "--auto", help="Loop until critic satisfied per entry"
+    ),
+    optimize: bool = typer.Option(
+        False, "--optimize", help="Preprocess inputs per entry"
+    ),
     category: Optional[str] = typer.Option(
         None, "--category", help="Only run entries in this category"
     ),
     ids: Optional[str] = typer.Option(
-        None, "--ids", help="Comma-separated entry IDs to run (e.g., 2601.03570v1,2601.05110v1)"
+        None,
+        "--ids",
+        help="Comma-separated entry IDs to run (e.g., 2601.03570v1,2601.05110v1)",
+    ),  # noqa: E501
+    limit: Optional[int] = typer.Option(
+        None, "--limit", help="Max number of entries to process"
     ),
-    limit: Optional[int] = typer.Option(None, "--limit", help="Max number of entries to process"),
     eval_only: Optional[str] = typer.Option(
         None,
         "--eval-only",
@@ -2156,7 +2456,9 @@ def benchmark(
     image_format: str = typer.Option(
         "png", "--format", "-f", help="Output image format (png, jpeg, webp)"
     ),
-    seed: Optional[int] = typer.Option(None, "--seed", help="Random seed for reproducibility"),
+    seed: Optional[int] = typer.Option(
+        None, "--seed", help="Random seed for reproducibility"
+    ),
     prompt_dir: Optional[str] = typer.Option(
         None,
         "--prompt-dir",
@@ -2168,11 +2470,15 @@ def benchmark(
         "-c",
         help="Maximum number of benchmark entries to process in parallel",
     ),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed progress"),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show detailed progress"
+    ),
 ):
     """Run generation + evaluation across PaperBananaBench entries."""
     if image_format not in ("png", "jpeg", "webp"):
-        console.print(f"[red]Error: Format must be png, jpeg, or webp. Got: {image_format}[/red]")
+        console.print(
+            f"[red]Error: Format must be png, jpeg, or webp. Got: {image_format}[/red]"
+        )  # noqa: E501
         raise typer.Exit(1)
     if concurrency < 1:
         console.print("[red]Error: --concurrency must be at least 1[/red]")
@@ -2184,7 +2490,10 @@ def benchmark(
 
     load_dotenv()
 
-    overrides: dict = {"output_format": image_format, "benchmark_concurrency": concurrency}
+    overrides: dict = {
+        "output_format": image_format,
+        "benchmark_concurrency": concurrency,
+    }
     if vlm_provider:
         overrides["vlm_provider"] = vlm_provider
     if vlm_model:
@@ -2218,7 +2527,9 @@ def benchmark(
     # Load and filter entries
     id_list = [s.strip() for s in ids.split(",") if s.strip()] if ids else None
     try:
-        entries = runner.load_entries(category=category, ids=id_list, limit=limit)
+        entries = runner.load_entries(
+            category=category, ids=id_list, limit=limit
+        )
     except ValueError as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
@@ -2235,7 +2546,7 @@ def benchmark(
             f"Mode: {mode}\n"
             f"VLM: {settings.vlm_provider} / {settings.effective_vlm_model}\n"
             f"Image: {settings.image_provider} / {settings.effective_image_model}",
-            border_style="magenta",
+            border_style="magenta",  # noqa: E501
         )
     )
     console.print()
@@ -2243,13 +2554,17 @@ def benchmark(
     bench_output_dir = Path(output_dir) if output_dir else None
 
     async def _run():
-        return await runner.run(entries, output_dir=bench_output_dir, eval_only_dir=eval_only)
+        return await runner.run(
+            entries, output_dir=bench_output_dir, eval_only_dir=eval_only
+        )
 
     report = asyncio.run(_run())
     summary = report.summary
 
     if not summary:
-        console.print("[yellow]No entries were successfully evaluated.[/yellow]")
+        console.print(
+            "[yellow]No entries were successfully evaluated.[/yellow]"
+        )
         return
 
     # Print summary table
@@ -2263,7 +2578,7 @@ def benchmark(
             f"Model win rate: {summary.get('model_win_rate', 0)}%\n"
             f"Mean overall score: {summary.get('mean_overall_score', 0)}/100\n"
             f"Mean generation time: {summary.get('mean_generation_seconds', 0)}s\n\n"
-            f"Completed: {report.completed}  "
+            f"Completed: {report.completed}  "  # noqa: E501
             f"Failed: {report.failed}  "
             f"Total: {report.total_seconds}s",
             border_style="cyan",
@@ -2291,8 +2606,12 @@ def benchmark(
     if report.run_dir:
         report_path = Path(report.run_dir)
     else:
-        report_path = Path(settings.output_dir) / report.created_at.replace(":", "")
-    console.print(f"\nReport: [bold]{report_path / 'benchmark_report.json'}[/bold]")
+        report_path = Path(settings.output_dir) / report.created_at.replace(
+            ":", ""
+        )
+    console.print(
+        f"\nReport: [bold]{report_path / 'benchmark_report.json'}[/bold]"
+    )
 
 
 # ── Data subcommands ──────────────────────────────────────────────
@@ -2304,13 +2623,15 @@ def download(
         "diagram",
         "--task",
         help="Which references to import: diagram, plot, or both (full_bench only)",
-    ),
+    ),  # noqa: E501
     curated: bool = typer.Option(
         False,
         "--curated",
         help="Download the lightweight curated expansion instead of the full benchmark",
+    ),  # noqa: E501
+    force: bool = typer.Option(
+        False, "--force", help="Re-download even if already cached"
     ),
-    force: bool = typer.Option(False, "--force", help="Re-download even if already cached"),
 ):
     """Download an expanded reference set.
 
@@ -2321,12 +2642,16 @@ def download(
 
     dataset = "curated" if curated else "full_bench"
     if curated and task != "diagram":
-        console.print("[yellow]Warning:[/yellow] --task is ignored when --curated is set.")
+        console.print(
+            "[yellow]Warning:[/yellow] --task is ignored when --curated is set."
+        )  # noqa: E501
     dm = DatasetManager()
     if dm.is_downloaded(dataset=dataset) and not force:
         info = dm.get_info() or {}
         meta = info.get("dataset_meta", {})
-        ds_version = meta.get(dataset, {}).get("version", info.get("version", "unknown"))
+        ds_version = meta.get(dataset, {}).get(
+            "version", info.get("version", "unknown")
+        )
         console.print(
             Panel.fit(
                 f"[bold]Reference Set — Already Cached[/bold]\n\n"
@@ -2347,9 +2672,13 @@ def download(
             dataset=dataset,
             task=task,
             force=force,
-            progress_callback=lambda msg: console.print(f"  [dim]●[/dim] {msg}"),
+            progress_callback=lambda msg: console.print(
+                f"  [dim]●[/dim] {msg}"
+            ),
         )
-        console.print(f"\n[green]Done![/green] {count} reference examples cached to:")
+        console.print(
+            f"\n[green]Done![/green] {count} reference examples cached to:"
+        )
         console.print(f"  [bold]{dm.reference_dir}[/bold]")
     except Exception as e:
         console.print(f"\n[red]Error:[/red] {e}")
@@ -2366,7 +2695,9 @@ def info():
 
     if not dataset_info:
         console.print("No expanded reference set cached.")
-        console.print("\nDownload with: [bold]paperbanana data download[/bold]")
+        console.print(
+            "\nDownload with: [bold]paperbanana data download[/bold]"
+        )
         return
 
     datasets = dataset_info.get("datasets", [])
@@ -2379,7 +2710,9 @@ def info():
     ]
     for ds in datasets:
         ds_meta = meta.get(ds, {})
-        lines.append(f"  {ds}: v{ds_meta.get('version', '?')} — {ds_meta.get('source', '?')}")
+        lines.append(
+            f"  {ds}: v{ds_meta.get('version', '?')} — {ds_meta.get('source', '?')}"
+        )  # noqa: E501
 
     console.print(Panel.fit("\n".join(lines), border_style="blue"))
 
@@ -2433,7 +2766,7 @@ def studio(
     ),
 ):
     """Launch PaperBanana Studio — local web UI for diagrams, plots, and evaluation."""
-    try:
+    try:  # noqa: E501
         from paperbanana.studio.app import launch_studio as launch_studio_ui
     except ImportError as e:
         console.print(

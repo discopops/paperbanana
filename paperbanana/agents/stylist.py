@@ -25,14 +25,16 @@ class StylistAgent(BaseAgent):
         prompt_dir: str = "prompts",
         prompt_recorder=None,
     ):
-        super().__init__(vlm_provider, prompt_dir, prompt_recorder=prompt_recorder)
+        super().__init__(
+            vlm_provider, prompt_dir, prompt_recorder=prompt_recorder
+        )
         self.guidelines = guidelines
 
     @property
     def agent_name(self) -> str:
         return "stylist"
 
-    async def run(
+    async def run(  # type: ignore[override]
         self,
         description: str,
         guidelines: str | None = None,
@@ -56,7 +58,9 @@ class StylistAgent(BaseAgent):
         if not style_guidelines:
             style_guidelines = self._default_guidelines()
 
-        prompt_type = "diagram" if diagram_type == DiagramType.METHODOLOGY else "plot"
+        prompt_type = (
+            "diagram" if diagram_type == DiagramType.METHODOLOGY else "plot"
+        )
         template = self.load_prompt(prompt_type)
         prompt = self.format_prompt(
             template,
@@ -67,7 +71,9 @@ class StylistAgent(BaseAgent):
             caption=caption,
         )
 
-        logger.info("Running stylist agent", description_length=len(description))
+        logger.info(
+            "Running stylist agent", description_length=len(description)
+        )
 
         optimized = await self.vlm.generate(
             prompt=prompt,

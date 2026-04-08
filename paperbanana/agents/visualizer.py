@@ -35,7 +35,9 @@ class VisualizerAgent(BaseAgent):
         output_dir: str = "outputs",
         prompt_recorder=None,
     ):
-        super().__init__(vlm_provider, prompt_dir, prompt_recorder=prompt_recorder)
+        super().__init__(
+            vlm_provider, prompt_dir, prompt_recorder=prompt_recorder
+        )
         self.image_gen = image_gen
         self.output_dir = Path(output_dir)
 
@@ -43,7 +45,7 @@ class VisualizerAgent(BaseAgent):
     def agent_name(self) -> str:
         return "visualizer"
 
-    async def run(
+    async def run(  # type: ignore[override]
         self,
         description: str,
         diagram_type: DiagramType = DiagramType.METHODOLOGY,
@@ -99,7 +101,11 @@ class VisualizerAgent(BaseAgent):
         logger.info("Generating diagram image", iteration=iteration)
 
         # Determine dimensions from aspect ratio or use defaults
-        w, h = self._ratio_to_dimensions(aspect_ratio) if aspect_ratio else (1792, 1024)
+        w, h = (
+            self._ratio_to_dimensions(aspect_ratio)
+            if aspect_ratio
+            else (1792, 1024)
+        )
 
         image = await self.image_gen.generate(
             prompt=prompt,
@@ -110,7 +116,9 @@ class VisualizerAgent(BaseAgent):
         )
 
         if output_path is None:
-            output_path = str(self.output_dir / f"diagram_iter_{iteration}.png")
+            output_path = str(
+                self.output_dir / f"diagram_iter_{iteration}.png"
+            )
 
         save_image(image, output_path)
         logger.info("Diagram saved", path=output_path)
@@ -192,14 +200,18 @@ class VisualizerAgent(BaseAgent):
             start = response.find("```python") + len("```python")
             end = response.find("```", start)
             if end == -1:
-                logger.warning("Plot code block is missing closing fence; using remaining response")
+                logger.warning(
+                    "Plot code block is missing closing fence; using remaining response"
+                )
                 return response[start:].strip()
             return response[start:end].strip()
         elif "```" in response:
             start = response.find("```") + 3
             end = response.find("```", start)
             if end == -1:
-                logger.warning("Plot code block is missing closing fence; using remaining response")
+                logger.warning(
+                    "Plot code block is missing closing fence; using remaining response"
+                )
                 return response[start:].strip()
             return response[start:end].strip()
         return response.strip()
@@ -211,7 +223,12 @@ class VisualizerAgent(BaseAgent):
         # Strip any OUTPUT_PATH assignments from VLM-generated code so the
         # injected value below is authoritative (the VLM is prompted to set
         # OUTPUT_PATH itself, which would override the injected line).
-        code = re.sub(r'^OUTPUT_PATH\s*=\s*["\'].*["\']\s*$', "", code, flags=re.MULTILINE)
+        code = re.sub(
+            r'^OUTPUT_PATH\s*=\s*["\'].*["\']\s*$',
+            "",
+            code,
+            flags=re.MULTILINE,
+        )
 
         # Inject the output path and figure size from aspect ratio
         figsize_line = ""
@@ -219,15 +236,15 @@ class VisualizerAgent(BaseAgent):
             w, h = self._ratio_to_dimensions(aspect_ratio)
             # Scale to reasonable matplotlib inches (assume 150 dpi)
             fig_w, fig_h = round(w / 150, 1), round(h / 150, 1)
-            figsize_line = (
-                f"import matplotlib\nmatplotlib.rcParams['figure.figsize'] = [{fig_w}, {fig_h}]\n"
-            )
+            figsize_line = f"import matplotlib\nmatplotlib.rcParams['figure.figsize'] = [{fig_w}, {fig_h}]\n"
         full_code = f'OUTPUT_PATH = "{output_path}"\n{figsize_line}{code}'
 
         # Ensure output directory exists
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".py", delete=False
+        ) as f:
             f.write(full_code)
             temp_path = f.name
 

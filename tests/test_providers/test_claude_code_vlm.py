@@ -143,7 +143,7 @@ async def test_generate_non_json_fallback() -> None:
 
 @pytest.mark.asyncio
 async def test_generate_with_images_correct_order() -> None:
-    """Image preambles appear in order (Image 1, Image 2, …) before the task prompt."""
+    """Image preambles appear in order (Image 1, Image 2, …) before the task prompt."""  # noqa: E501
     payload = json.dumps({"result": "described"}).encode()
     factory = _make_proc_mock(stdout=payload)
 
@@ -484,7 +484,7 @@ async def test_error_message_truncated_to_500_chars() -> None:
 
 @pytest.mark.asyncio
 async def test_temp_files_cleaned_up_when_exec_raises() -> None:
-    """If create_subprocess_exec raises OSError, temp files are still removed."""
+    """If create_subprocess_exec raises OSError, temp files are still removed."""  # noqa: E501
     img = Image.new("RGB", (4, 4))
     created_paths: list[str] = []
 
@@ -520,7 +520,7 @@ async def test_temp_files_cleaned_up_when_exec_raises() -> None:
 
 @pytest.mark.asyncio
 async def test_generate_warns_on_non_default_temperature() -> None:
-    """A warning is logged when temperature or max_tokens differ from defaults."""
+    """A warning is logged when temperature or max_tokens differ from defaults."""  # noqa: E501
     payload = json.dumps({"result": "ok"}).encode()
     factory = _make_proc_mock(stdout=payload)
 

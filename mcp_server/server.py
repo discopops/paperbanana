@@ -37,7 +37,9 @@ logger = structlog.get_logger()
 # Claude API enforces a 5 MB limit on base64-encoded images in tool results.
 # Base64 inflates raw bytes by ~4/3, so we cap the raw file at 3.75 MB to
 # stay safely under the wire.
-_MAX_IMAGE_BYTES = int(os.environ.get("PAPERBANANA_MAX_IMAGE_BYTES", 3_750_000))
+_MAX_IMAGE_BYTES = int(
+    os.environ.get("PAPERBANANA_MAX_IMAGE_BYTES", 3_750_000)
+)
 
 
 def _compress_for_api(image_path: str) -> tuple[str, str]:
@@ -122,12 +124,12 @@ async def generate_diagram(
     Args:
         source_context: Methodology section text or relevant paper excerpt.
         caption: Figure caption describing what the diagram should communicate.
-        iterations: Number of refinement iterations (default 3, used when auto_refine=False).
+        iterations: Number of refinement iterations (default 3, used when auto_refine=False).  # noqa: E501
         aspect_ratio: Target aspect ratio. Supported:
             1:1, 2:3, 3:2, 3:4, 4:3, 9:16, 16:9, 21:9. Default: landscape.
-        optimize: Enrich context and sharpen caption before generation (default True).
+        optimize: Enrich context and sharpen caption before generation (default True).  # noqa: E501
             Set False to skip preprocessing for faster results.
-        auto_refine: Let critic loop until satisfied (default True, max 30 iterations).
+        auto_refine: Let critic loop until satisfied (default True, max 30 iterations).  # noqa: E501
             Set False to use fixed iteration count for faster results.
 
     Returns:
@@ -140,10 +142,17 @@ async def generate_diagram(
     )
 
     def _on_progress(event: str, payload: dict) -> None:
-        # Surface coarse progress to MCP logs; IDEs can display this in tool output.
-        logger.info("mcp_progress", tool="generate_diagram", progress_event=event, **payload)
+        # Surface coarse progress to MCP logs; IDEs can display this in tool output.  # noqa: E501
+        logger.info(
+            "mcp_progress",
+            tool="generate_diagram",
+            progress_event=event,
+            **payload,
+        )
 
-    pipeline = PaperBananaPipeline(settings=settings, progress_callback=_on_progress)
+    pipeline = PaperBananaPipeline(
+        settings=settings, progress_callback=_on_progress
+    )
 
     gen_input = GenerationInput(
         source_context=source_context,
@@ -171,13 +180,13 @@ async def generate_plot(
     Args:
         data_json: JSON string containing the data to plot.
             Example: '{"x": [1,2,3], "y": [4,5,6], "labels": ["a","b","c"]}'
-        intent: Description of the desired plot (e.g. "Bar chart comparing model accuracy").
-        iterations: Number of refinement iterations (default 3, used when auto_refine=False).
+        intent: Description of the desired plot (e.g. "Bar chart comparing model accuracy").  # noqa: E501
+        iterations: Number of refinement iterations (default 3, used when auto_refine=False).  # noqa: E501
         aspect_ratio: Target aspect ratio. Supported:
             1:1, 2:3, 3:2, 3:4, 4:3, 9:16, 16:9, 21:9. Default: landscape.
-        optimize: Enrich context and sharpen caption before generation (default True).
+        optimize: Enrich context and sharpen caption before generation (default True).  # noqa: E501
             Set False to skip preprocessing for faster results.
-        auto_refine: Let critic loop until satisfied (default True, max 30 iterations).
+        auto_refine: Let critic loop until satisfied (default True, max 30 iterations).  # noqa: E501
             Set False to use fixed iteration count for faster results.
 
     Returns:
@@ -192,9 +201,16 @@ async def generate_plot(
     )
 
     def _on_progress(event: str, payload: dict) -> None:
-        logger.info("mcp_progress", tool="generate_plot", progress_event=event, **payload)
+        logger.info(
+            "mcp_progress",
+            tool="generate_plot",
+            progress_event=event,
+            **payload,
+        )
 
-    pipeline = PaperBananaPipeline(settings=settings, progress_callback=_on_progress)
+    pipeline = PaperBananaPipeline(
+        settings=settings, progress_callback=_on_progress
+    )
 
     gen_input = GenerationInput(
         source_context=f"Data for plotting:\n{data_json}",
@@ -229,7 +245,7 @@ async def evaluate_diagram(
         caption: Figure caption describing what the diagram communicates.
 
     Returns:
-        Formatted evaluation scores with per-dimension results and overall winner.
+        Formatted evaluation scores with per-dimension results and overall winner.  # noqa: E501
     """
     settings = Settings()
     vlm = ProviderRegistry.create_vlm(settings)
@@ -245,12 +261,12 @@ async def evaluate_diagram(
     lines = [
         "Evaluation Results",
         "=" * 40,
-        f"Faithfulness:  {scores.faithfulness.winner} — {scores.faithfulness.reasoning}",
-        f"Conciseness:   {scores.conciseness.winner} — {scores.conciseness.reasoning}",
-        f"Readability:   {scores.readability.winner} — {scores.readability.reasoning}",
-        f"Aesthetics:    {scores.aesthetics.winner} — {scores.aesthetics.reasoning}",
+        f"Faithfulness:  {scores.faithfulness.winner} — {scores.faithfulness.reasoning}",  # noqa: E501
+        f"Conciseness:   {scores.conciseness.winner} — {scores.conciseness.reasoning}",  # noqa: E501
+        f"Readability:   {scores.readability.winner} — {scores.readability.reasoning}",  # noqa: E501
+        f"Aesthetics:    {scores.aesthetics.winner} — {scores.aesthetics.reasoning}",  # noqa: E501
         "-" * 40,
-        f"Overall Winner: {scores.overall_winner} (score: {scores.overall_score})",
+        f"Overall Winner: {scores.overall_winner} (score: {scores.overall_score})",  # noqa: E501
     ]
     return "\n".join(lines)
 
@@ -292,7 +308,7 @@ async def download_references(
     return (
         f"Downloaded {count} reference examples.\n"
         f"Cached to: {dm.reference_dir}\n"
-        f"The Retriever agent will now use these for better diagram generation."
+        f"The Retriever agent will now use these for better diagram generation."  # noqa: E501
     )
 
 

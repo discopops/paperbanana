@@ -40,8 +40,13 @@ class TestMergeIndex:
 
     def test_merge_deduplicates_by_id(self, tmp_path):
         idx = tmp_path / "index.json"
-        _merge_index(idx, [{"id": "a", "category": "old"}, {"id": "b", "category": "keep"}])
-        count = _merge_index(idx, [{"id": "a", "category": "new"}, {"id": "c", "category": "c"}])
+        _merge_index(
+            idx,
+            [{"id": "a", "category": "old"}, {"id": "b", "category": "keep"}],
+        )
+        count = _merge_index(
+            idx, [{"id": "a", "category": "new"}, {"id": "c", "category": "c"}]
+        )
         assert count == 3
         data = json.loads(idx.read_text())
         ids = {e["id"] for e in data["examples"]}
@@ -58,7 +63,9 @@ class TestMergeIndex:
 
     def test_merge_preserves_examples_without_id(self, tmp_path):
         idx = tmp_path / "index.json"
-        _merge_index(idx, [{"id": "a", "category": "cat1"}, {"category": "no_id"}])
+        _merge_index(
+            idx, [{"id": "a", "category": "cat1"}, {"category": "no_id"}]
+        )
         count = _merge_index(idx, [{"category": "also_no_id"}])
         assert count == 3
         data = json.loads(idx.read_text())
@@ -108,7 +115,7 @@ class TestIsDownloaded:
         assert tmp_cache.is_downloaded(dataset="full_bench")
 
     def test_back_compat_old_format(self, tmp_cache):
-        """Old dataset_info.json without 'datasets' key but with DATASET_URL source."""
+        """Old dataset_info.json without 'datasets' key but with DATASET_URL source."""  # noqa: E501
         from paperbanana.data.manager import DATASET_URL
 
         tmp_cache.reference_dir.mkdir(parents=True)
@@ -125,7 +132,7 @@ class TestIsDownloaded:
         assert not tmp_cache.is_downloaded(dataset="curated")
 
     def test_legacy_cache_index_only(self, tmp_cache):
-        """Caches with index.json but no dataset_info.json count as downloaded."""
+        """Caches with index.json but no dataset_info.json count as downloaded."""  # noqa: E501
         tmp_cache.reference_dir.mkdir(parents=True)
         tmp_cache.index_path.write_text(
             json.dumps(
@@ -152,37 +159,58 @@ class TestIsDownloaded:
 class TestRecordDataset:
     def test_records_new_dataset(self, tmp_cache):
         tmp_cache.reference_dir.mkdir(parents=True)
-        tmp_cache._record_dataset("curated", "1.0.0", "https://example.com", 25)
+        tmp_cache._record_dataset(
+            "curated", "1.0.0", "https://example.com", 25
+        )
         info = json.loads(tmp_cache.info_path.read_text())
         assert "curated" in info["datasets"]
         assert info["example_count"] == 25
         assert info["dataset_meta"]["curated"]["version"] == "1.0.0"
-        assert info["dataset_meta"]["curated"]["source"] == "https://example.com"
+        assert (
+            info["dataset_meta"]["curated"]["source"] == "https://example.com"
+        )
 
     def test_preserves_existing_datasets(self, tmp_cache):
         tmp_cache.reference_dir.mkdir(parents=True)
-        tmp_cache._record_dataset("curated", "1.0.0", "https://curated.example.com", 25)
-        tmp_cache._record_dataset("full_bench", "2.0.0", "https://bench.example.com", 294)
+        tmp_cache._record_dataset(
+            "curated", "1.0.0", "https://curated.example.com", 25
+        )
+        tmp_cache._record_dataset(
+            "full_bench", "2.0.0", "https://bench.example.com", 294
+        )
         info = json.loads(tmp_cache.info_path.read_text())
         assert sorted(info["datasets"]) == ["curated", "full_bench"]
         assert info["dataset_meta"]["curated"]["version"] == "1.0.0"
-        assert info["dataset_meta"]["curated"]["source"] == "https://curated.example.com"
+        assert (
+            info["dataset_meta"]["curated"]["source"]
+            == "https://curated.example.com"
+        )
         assert info["dataset_meta"]["full_bench"]["version"] == "2.0.0"
 
     def test_per_dataset_meta_not_overwritten(self, tmp_cache):
         tmp_cache.reference_dir.mkdir(parents=True)
-        tmp_cache._record_dataset("curated", "1.0.0", "https://curated.example.com", 25)
-        tmp_cache._record_dataset("full_bench", "2.0.0", "https://bench.example.com", 294)
+        tmp_cache._record_dataset(
+            "curated", "1.0.0", "https://curated.example.com", 25
+        )
+        tmp_cache._record_dataset(
+            "full_bench", "2.0.0", "https://bench.example.com", 294
+        )
         info = json.loads(tmp_cache.info_path.read_text())
         # top-level version/source should not exist
         assert "version" not in info
         assert "source" not in info
         # per-dataset metadata preserved
-        assert info["dataset_meta"]["curated"]["source"] == "https://curated.example.com"
-        assert info["dataset_meta"]["full_bench"]["source"] == "https://bench.example.com"
+        assert (
+            info["dataset_meta"]["curated"]["source"]
+            == "https://curated.example.com"
+        )
+        assert (
+            info["dataset_meta"]["full_bench"]["source"]
+            == "https://bench.example.com"
+        )
 
     def test_back_compat_upgrade(self, tmp_cache):
-        """Recording a new dataset upgrades old-format info to include datasets list."""
+        """Recording a new dataset upgrades old-format info to include datasets list."""  # noqa: E501
         from paperbanana.data.manager import DATASET_URL
 
         tmp_cache.reference_dir.mkdir(parents=True)
@@ -194,7 +222,9 @@ class TestRecordDataset:
                 }
             )
         )
-        tmp_cache._record_dataset("curated", "1.0.0", "https://example.com", 38)
+        tmp_cache._record_dataset(
+            "curated", "1.0.0", "https://example.com", 38
+        )
         info = json.loads(tmp_cache.info_path.read_text())
         assert sorted(info["datasets"]) == ["curated", "full_bench"]
 
@@ -230,7 +260,9 @@ class TestDownloadSkip:
 
 
 class TestDownloadCurated:
-    def _make_curated_zip(self, zip_dest: Path, examples: list[dict], images: dict[str, bytes]):
+    def _make_curated_zip(
+        self, zip_dest: Path, examples: list[dict], images: dict[str, bytes]
+    ):
         """Helper to create a fake CuratedExpansion.zip."""
         import zipfile
 
@@ -254,8 +286,16 @@ class TestDownloadCurated:
 
     def test_download_curated_merges(self, tmp_cache):
         examples = [
-            {"id": "new1", "category": "cat1", "image_path": "images/new1.jpg"},
-            {"id": "new2", "category": "cat2", "image_path": "images/new2.jpg"},
+            {
+                "id": "new1",
+                "category": "cat1",
+                "image_path": "images/new1.jpg",
+            },
+            {
+                "id": "new2",
+                "category": "cat2",
+                "image_path": "images/new2.jpg",
+            },
         ]
         images = {"new1.jpg": b"\xff\xd8fake", "new2.jpg": b"\xff\xd8fake"}
 
@@ -274,7 +314,10 @@ class TestDownloadCurated:
         def fake_download(url, dest):
             self._make_curated_zip(dest, examples, images)
 
-        with patch("paperbanana.data.manager._download_file", side_effect=fake_download):
+        with patch(
+            "paperbanana.data.manager._download_file",
+            side_effect=fake_download,
+        ):
             count = tmp_cache.download(dataset="curated", force=True)
 
         assert count == 3  # 1 existing + 2 new
@@ -286,14 +329,19 @@ class TestDownloadCurated:
         assert "curated" in info["datasets"]
 
     def test_download_curated_with_progress(self, tmp_cache):
-        examples = [{"id": "p1", "category": "c", "image_path": "images/p1.jpg"}]
+        examples = [
+            {"id": "p1", "category": "c", "image_path": "images/p1.jpg"}
+        ]
         images = {"p1.jpg": b"\xff\xd8fake"}
         messages = []
 
         def fake_download(url, dest):
             self._make_curated_zip(dest, examples, images)
 
-        with patch("paperbanana.data.manager._download_file", side_effect=fake_download):
+        with patch(
+            "paperbanana.data.manager._download_file",
+            side_effect=fake_download,
+        ):
             tmp_cache.download(
                 dataset="curated",
                 force=True,
@@ -306,8 +354,13 @@ class TestDownloadCurated:
         def fake_download(url, dest):
             raise Exception("404 Not Found")
 
-        with patch("paperbanana.data.manager._download_file", side_effect=fake_download):
-            with pytest.raises(RuntimeError, match="artifact may not be published yet"):
+        with patch(
+            "paperbanana.data.manager._download_file",
+            side_effect=fake_download,
+        ):
+            with pytest.raises(
+                RuntimeError, match="artifact may not be published yet"
+            ):
                 tmp_cache.download(dataset="curated", force=True)
 
 
@@ -315,7 +368,7 @@ class TestDownloadCurated:
 
 
 class TestFullBenchMerge:
-    """Downloading full_bench after curated must preserve curated-only entries."""
+    """Downloading full_bench after curated must preserve curated-only entries."""  # noqa: E501
 
     def test_full_bench_preserves_curated_entries(self, tmp_cache):
         """Curated entries that are NOT in full_bench survive a full import."""
@@ -373,7 +426,9 @@ class TestFullBenchMerge:
 
 class TestResolveReferencePath:
     def test_explicit_settings_path_wins(self, tmp_path):
-        result = resolve_reference_path("/custom/path", cache_dir=str(tmp_path))
+        result = resolve_reference_path(
+            "/custom/path", cache_dir=str(tmp_path)
+        )
         assert result == "/custom/path"
 
     def test_uses_cache_when_downloaded(self, tmp_path):
@@ -395,11 +450,15 @@ class TestResolveReferencePath:
                 }
             )
         )
-        result = resolve_reference_path("data/reference_sets", cache_dir=str(tmp_path))
+        result = resolve_reference_path(
+            "data/reference_sets", cache_dir=str(tmp_path)
+        )
         assert result == str(ref_dir)
 
     def test_falls_back_to_builtin(self, tmp_path):
-        result = resolve_reference_path("data/reference_sets", cache_dir=str(tmp_path))
+        result = resolve_reference_path(
+            "data/reference_sets", cache_dir=str(tmp_path)
+        )
         assert result == "data/reference_sets"
 
 

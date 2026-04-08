@@ -31,15 +31,20 @@ class PlannerAgent(BaseAgent):
     """
 
     def __init__(
-        self, vlm_provider: VLMProvider, prompt_dir: str = "prompts", prompt_recorder=None
+        self,
+        vlm_provider: VLMProvider,
+        prompt_dir: str = "prompts",
+        prompt_recorder=None,
     ):
-        super().__init__(vlm_provider, prompt_dir, prompt_recorder=prompt_recorder)
+        super().__init__(
+            vlm_provider, prompt_dir, prompt_recorder=prompt_recorder
+        )
 
     @property
     def agent_name(self) -> str:
         return "planner"
 
-    async def run(
+    async def run(  # type: ignore[override]
         self,
         source_context: str,
         caption: str,
@@ -64,12 +69,18 @@ class PlannerAgent(BaseAgent):
         examples_text = self._format_examples(examples)
 
         # Load reference images for visual in-context learning
-        example_images = await asyncio.to_thread(self._load_example_images, examples)
+        example_images = await asyncio.to_thread(
+            self._load_example_images, examples
+        )
 
-        prompt_type = "diagram" if diagram_type == DiagramType.METHODOLOGY else "plot"
+        prompt_type = (
+            "diagram" if diagram_type == DiagramType.METHODOLOGY else "plot"
+        )
         template = self.load_prompt(prompt_type)
         # Inject supported ratios into the prompt template
-        ratios_str = ", ".join(supported_ratios) if supported_ratios else "1:1, 16:9"
+        ratios_str = (
+            ", ".join(supported_ratios) if supported_ratios else "1:1, 16:9"
+        )
         prompt = self.format_prompt(
             template,
             prompt_label="planner",
@@ -117,7 +128,9 @@ class PlannerAgent(BaseAgent):
             image_ref = ""
             if has_image:
                 img_index += 1
-                image_ref = f"\n**Diagram**: [See reference image {img_index} above]"
+                image_ref = (
+                    f"\n**Diagram**: [See reference image {img_index} above]"
+                )
 
             ratio_info = ""
             if ex.aspect_ratio:
@@ -196,7 +209,9 @@ class PlannerAgent(BaseAgent):
         if not hostname:
             raise ValueError("remote image URL is missing hostname")
         if not self._hostname_resolves_to_global_addresses(hostname):
-            raise ValueError("remote image hostname resolves to non-public address")
+            raise ValueError(
+                "remote image hostname resolves to non-public address"
+            )
 
         with httpx.Client(
             timeout=self._REMOTE_IMAGE_TIMEOUT_SECONDS,
@@ -209,11 +224,15 @@ class PlannerAgent(BaseAgent):
 
             content_type = (response.headers.get("content-type") or "").lower()
             if not content_type.startswith("image/"):
-                raise ValueError("remote URL did not return an image content type")
+                raise ValueError(
+                    "remote URL did not return an image content type"
+                )
 
             data = response.content
             if len(data) > self._MAX_REMOTE_IMAGE_BYTES:
-                raise ValueError(f"remote image exceeds {self._MAX_REMOTE_IMAGE_BYTES} byte limit")
+                raise ValueError(
+                    f"remote image exceeds {self._MAX_REMOTE_IMAGE_BYTES} byte limit"
+                )
 
         return Image.open(BytesIO(data)).convert("RGB")
 

@@ -1,4 +1,4 @@
-"""OpenAI image generation provider — works with both OpenAI and Azure OpenAI endpoints."""
+"""OpenAI image generation provider — works with both OpenAI and Azure OpenAI endpoints."""  # noqa: E501
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ logger = structlog.get_logger()
 class OpenAIImageGen(ImageGenProvider):
     """Image generation using the OpenAI Python SDK (async).
 
-    Supports GPT-Image-1.5, GPT-Image-1, DALL-E 3, and other OpenAI image models.
+    Supports GPT-Image-1.5, GPT-Image-1, DALL-E 3, and other OpenAI image models.  # noqa: E501
     Compatible with both OpenAI and Azure OpenAI / Foundry endpoints.
     """
 
@@ -107,12 +107,16 @@ class OpenAIImageGen(ImageGenProvider):
             model=self._model,
             prompt=full_prompt,
             n=1,
-            size=self._RATIO_TO_SIZE.get(aspect_ratio, self._size_string(width, height)),
+            size=self._RATIO_TO_SIZE.get(
+                aspect_ratio or "", self._size_string(width, height)
+            ),
         )
 
         b64_data = result.data[0].b64_json
         image_bytes = base64.b64decode(b64_data)
 
         if self.cost_tracker is not None:
-            self.cost_tracker.record_image_call(provider=self.name, model=self._model)
+            self.cost_tracker.record_image_call(
+                provider=self.name, model=self._model
+            )
         return Image.open(BytesIO(image_bytes))

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from paperbanana.core.sweep import (
@@ -57,7 +59,7 @@ def test_parse_csv_bools_supports_common_forms() -> None:
 
 
 def test_rank_and_summarize_sweep_results() -> None:
-    results = [
+    results: list[dict[str, Any]] = [
         {
             "variant_id": "a",
             "status": "success",
@@ -72,7 +74,9 @@ def test_rank_and_summarize_sweep_results() -> None:
             "total_seconds": 25.0,
         },
     ]
-    ranked = rank_sweep_results([x for x in results if x["status"] == "success"])
+    ranked = rank_sweep_results(
+        [x for x in results if x["status"] == "success"]  # type: ignore[misc]
+    )
     assert [x["variant_id"] for x in ranked] == ["c", "a"]
 
     summary = summarize_sweep(results)

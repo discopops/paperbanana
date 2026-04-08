@@ -18,7 +18,7 @@ logger = structlog.get_logger()
 class GoogleImagenGen(ImageGenProvider):
     """Google Gemini 3 Pro Image generation via google-genai SDK.
 
-    Uses the gemini-3-pro-image-preview model with response_modalities=["IMAGE"].
+    Uses the gemini-3-pro-image-preview model with response_modalities=["IMAGE"].  # noqa: E501
     Requires a Google API key (free tier available).
     """
 
@@ -48,7 +48,9 @@ class GoogleImagenGen(ImageGenProvider):
 
                 client_kwargs = {"api_key": self._api_key}
                 if self._base_url:
-                    client_kwargs["http_options"] = {"base_url": self._base_url}
+                    client_kwargs["http_options"] = {
+                        "base_url": self._base_url
+                    }
                 self._client = genai.Client(**client_kwargs)
             except ImportError:
                 raise ImportError(
@@ -65,7 +67,16 @@ class GoogleImagenGen(ImageGenProvider):
         return ["1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"]
 
     # All aspect ratios supported by Google Imagen API
-    _SUPPORTED_RATIOS = {"1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"}
+    _SUPPORTED_RATIOS = {
+        "1:1",
+        "2:3",
+        "3:2",
+        "3:4",
+        "4:3",
+        "9:16",
+        "16:9",
+        "21:9",
+    }
 
     def _aspect_ratio(self, width: int, height: int) -> str:
         """Infer aspect ratio from pixel dimensions."""
@@ -106,7 +117,7 @@ class GoogleImagenGen(ImageGenProvider):
     ) -> Image.Image:
         from google.genai import types
 
-        self._get_client()
+        client = self._get_client()
 
         if negative_prompt:
             prompt = f"{prompt}\n\nAvoid: {negative_prompt}"
@@ -119,7 +130,7 @@ class GoogleImagenGen(ImageGenProvider):
             ),
         )
 
-        response = self._client.models.generate_content(
+        response = client.models.generate_content(
             model=self._model,
             contents=prompt,
             config=config,
@@ -139,16 +150,22 @@ class GoogleImagenGen(ImageGenProvider):
                 try:
                     img = part.as_image()
                     if self.cost_tracker is not None:
-                        self.cost_tracker.record_image_call(provider=self.name, model=self._model)
+                        self.cost_tracker.record_image_call(
+                            provider=self.name, model=self._model
+                        )
                     return img
                 except Exception:
                     pass
             inline = getattr(part, "inline_data", None)
             if inline and getattr(inline, "data", None):
                 data = inline.data
-                image_bytes = base64.b64decode(data) if isinstance(data, str) else data
+                image_bytes = (
+                    base64.b64decode(data) if isinstance(data, str) else data
+                )
                 if self.cost_tracker is not None:
-                    self.cost_tracker.record_image_call(provider=self.name, model=self._model)
+                    self.cost_tracker.record_image_call(
+                        provider=self.name, model=self._model
+                    )
                 return Image.open(BytesIO(image_bytes))
 
         logger.error("No image data in Gemini response", model=self._model)

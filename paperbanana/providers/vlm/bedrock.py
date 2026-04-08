@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from io import BytesIO
-from typing import Optional
+from typing import Any, Optional
 
 import structlog
 from PIL import Image
@@ -82,7 +82,7 @@ class BedrockVLM(VLMProvider):
     ) -> str:
         client = self._get_client()
 
-        content = []
+        content: list[dict[str, Any]] = []
         if images:
             for img in images:
                 buf = BytesIO()
@@ -97,7 +97,7 @@ class BedrockVLM(VLMProvider):
                 )
         content.append({"text": prompt})
 
-        kwargs: dict = {
+        kwargs: dict[str, Any] = {
             "modelId": self._model,
             "messages": [{"role": "user", "content": content}],
             "inferenceConfig": {
@@ -109,7 +109,9 @@ class BedrockVLM(VLMProvider):
             kwargs["system"] = [{"text": system_prompt}]
 
         loop = asyncio.get_running_loop()
-        response = await loop.run_in_executor(None, lambda: client.converse(**kwargs))
+        response = await loop.run_in_executor(
+            None, lambda: client.converse(**kwargs)
+        )
 
         text = response["output"]["message"]["content"][0]["text"]
 

@@ -1,4 +1,4 @@
-"""Tests for paperbanana.core.batch — manifest loading and report generation."""
+"""Tests for paperbanana.core.batch — manifest loading and report generation."""  # noqa: E501
 
 from __future__ import annotations
 
@@ -81,7 +81,9 @@ def test_load_plot_batch_manifest_resolves_paths(tmp_path: Path) -> None:
     assert Path(items[0]["data"]) == csv.resolve()
 
 
-def test_load_plot_batch_manifest_requires_data_and_intent(tmp_path: Path) -> None:
+def test_load_plot_batch_manifest_requires_data_and_intent(
+    tmp_path: Path,
+) -> None:
     m = tmp_path / "bad.yaml"
     m.write_text('items:\n  - data: "x.csv"\n', encoding="utf-8")
     with pytest.raises(ValueError, match="intent"):
@@ -94,7 +96,9 @@ def test_load_plot_batch_manifest_empty_items(tmp_path: Path) -> None:
     assert load_plot_batch_manifest(m) == []
 
 
-def test_load_plot_batch_manifest_rejects_non_tabular_suffix(tmp_path: Path) -> None:
+def test_load_plot_batch_manifest_rejects_non_tabular_suffix(
+    tmp_path: Path,
+) -> None:
     txt = tmp_path / "a.txt"
     txt.write_text("x", encoding="utf-8")
     m = tmp_path / "m.yaml"
@@ -119,12 +123,19 @@ def test_load_batch_report_success(tmp_path: Path):
         "batch_id": "batch_20250109_120000_abc",
         "manifest": "/path/to/manifest.yaml",
         "items": [
-            {"id": "fig1", "caption": "Overview", "output_path": "/out/fig1.png", "iterations": 3},
+            {
+                "id": "fig1",
+                "caption": "Overview",
+                "output_path": "/out/fig1.png",
+                "iterations": 3,
+            },
             {"id": "fig2", "caption": "Pipeline", "error": "API error"},
         ],
         "total_seconds": 42.5,
     }
-    (tmp_path / REPORT_FILENAME).write_text(json.dumps(report_data), encoding="utf-8")
+    (tmp_path / REPORT_FILENAME).write_text(
+        json.dumps(report_data), encoding="utf-8"
+    )
     loaded = load_batch_report(tmp_path)
     assert loaded["batch_id"] == "batch_20250109_120000_abc"
     assert len(loaded["items"]) == 2
@@ -148,7 +159,9 @@ def test_load_batch_report_invalid_json(tmp_path: Path):
 
 
 def test_load_batch_report_missing_items_key(tmp_path: Path):
-    (tmp_path / REPORT_FILENAME).write_text('{"batch_id": "x"}', encoding="utf-8")
+    (tmp_path / REPORT_FILENAME).write_text(
+        '{"batch_id": "x"}', encoding="utf-8"
+    )
     with pytest.raises(ValueError, match="Invalid report"):
         load_batch_report(tmp_path)
 
@@ -163,7 +176,12 @@ def test_generate_batch_report_md_contains_summary(tmp_path: Path):
         "batch_id": "batch_123",
         "manifest": "manifest.yaml",
         "items": [
-            {"id": "a", "caption": "Cap A", "output_path": "/out/a.png", "iterations": 2},
+            {
+                "id": "a",
+                "caption": "Cap A",
+                "output_path": "/out/a.png",
+                "iterations": 2,
+            },
             {"id": "b", "caption": "Cap B", "error": "Failed"},
         ],
         "total_seconds": 10.0,
@@ -190,7 +208,9 @@ def test_generate_batch_report_md_includes_batch_kind(tmp_path: Path) -> None:
     assert "statistical plots" in md
 
 
-def test_generate_batch_report_html_includes_batch_kind(tmp_path: Path) -> None:
+def test_generate_batch_report_html_includes_batch_kind(
+    tmp_path: Path,
+) -> None:
     report = {
         "batch_id": "batch_m",
         "manifest": "m.yaml",
@@ -212,7 +232,12 @@ def test_generate_batch_report_html_contains_summary(tmp_path: Path):
         "batch_id": "batch_456",
         "manifest": "m.yaml",
         "items": [
-            {"id": "x", "caption": "X", "output_path": str(tmp_path / "x.png"), "iterations": 1},
+            {
+                "id": "x",
+                "caption": "X",
+                "output_path": str(tmp_path / "x.png"),
+                "iterations": 1,
+            },
         ],
         "total_seconds": 5.0,
     }
@@ -244,9 +269,13 @@ def test_write_batch_report_markdown(tmp_path: Path):
         ],
         "total_seconds": 1.0,
     }
-    (tmp_path / REPORT_FILENAME).write_text(json.dumps(report_data), encoding="utf-8")
+    (tmp_path / REPORT_FILENAME).write_text(
+        json.dumps(report_data), encoding="utf-8"
+    )
     out_path = tmp_path / "report.md"
-    written = write_batch_report(tmp_path, output_path=out_path, format="markdown")
+    written = write_batch_report(
+        tmp_path, output_path=out_path, format="markdown"
+    )
     assert written == out_path
     assert out_path.exists()
     assert "Batch Report: batch_write" in out_path.read_text(encoding="utf-8")
@@ -259,7 +288,9 @@ def test_write_batch_report_html_default_path(tmp_path: Path):
         "items": [],
         "total_seconds": 0,
     }
-    (tmp_path / REPORT_FILENAME).write_text(json.dumps(report_data), encoding="utf-8")
+    (tmp_path / REPORT_FILENAME).write_text(
+        json.dumps(report_data), encoding="utf-8"
+    )
     written = write_batch_report(tmp_path, format="html")
     assert written == tmp_path / "batch_report.html"
     assert written.exists()

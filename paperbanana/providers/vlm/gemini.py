@@ -51,7 +51,9 @@ class GeminiVLM(VLMProvider):
 
                 client_kwargs = {"api_key": self._api_key}
                 if self._base_url:
-                    client_kwargs["http_options"] = {"base_url": self._base_url}
+                    client_kwargs["http_options"] = {
+                        "base_url": self._base_url
+                    }
                 self._client = genai.Client(**client_kwargs)
             except ImportError:
                 raise ImportError(
