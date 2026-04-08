@@ -70,6 +70,157 @@ def test_generate_accepts_progress_json_flag():
         Path(input_path).unlink(missing_ok=True)
 
 
+def test_sweep_dry_run_writes_report(tmp_path):
+    """sweep --dry-run plans variants and writes sweep_report.json."""
+    input_path = tmp_path / "input.txt"
+    input_path.write_text("Method details", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "sweep",
+            "--input",
+            str(input_path),
+            "--caption",
+            "Sweep caption",
+            "--vlm-providers",
+            "gemini,openai",
+            "--iterations",
+            "2,3",
+            "--optimize-modes",
+            "on,off",
+            "--dry-run",
+            "--output-dir",
+            str(tmp_path),
+        ],
+    )
+    assert result.exit_code == 0
+    assert "Dry run complete" in result.output
+
+    reports = list(tmp_path.glob("sweep_*/sweep_report.json"))
+    assert len(reports) == 1
+    payload = json.loads(reports[0].read_text(encoding="utf-8"))
+    assert payload["status"] == "dry_run"
+    assert payload["total_variants"] == 8
+
+
+def test_sweep_rejects_invalid_bool_axis(tmp_path):
+    """sweep rejects invalid boolean tokens in mode axes."""
+    input_path = tmp_path / "input.txt"
+    input_path.write_text("Method details", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "sweep",
+            "--input",
+            str(input_path),
+            "--caption",
+            "Sweep caption",
+            "--optimize-modes",
+            "maybe",
+            "--dry-run",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "booleans" in result.output
+
+
+def test_sweep_pdf_pages_rejected_for_text_input(tmp_path):
+    """--pdf-pages is only valid for PDF inputs."""
+    input_path = tmp_path / "input.txt"
+    input_path.write_text("Method details", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "sweep",
+            "--input",
+            str(input_path),
+            "--caption",
+            "c",
+            "--pdf-pages",
+            "1-2",
+            "--dry-run",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "pdf" in result.output.lower()
+
+
+def test_sweep_writes_report_with_mocked_pipeline(tmp_path, monkeypatch):
+    """Non-dry sweep writes sweep_report.json with timing, ranking, and completed status."""
+    input_path = tmp_path / "input.txt"
+    input_path.write_text("Method details", encoding="utf-8")
+
+    call_state = {"n": 0}
+
+    class _FakePipeline:
+        def __init__(self, settings=None, **kwargs):
+            self.settings = settings
+
+        async def generate(self, gen_input):
+            call_state["n"] += 1
+            from paperbanana.core.types import (
+                CritiqueResult,
+                GenerationOutput,
+                IterationRecord,
+            )
+
+            n_suggestions = 0 if call_state["n"] == 1 else 2
+            suggestions = [f"issue-{i}" for i in range(n_suggestions)]
+            img = str(tmp_path / f"iter_{call_state['n']}.png")
+            return GenerationOutput(
+                image_path=img,
+                description="d",
+                iterations=[
+                    IterationRecord(
+                        iteration=1,
+                        description="d",
+                        image_path=img,
+                        critique=CritiqueResult(critic_suggestions=suggestions),
+                    )
+                ],
+                metadata={"run_id": f"run_{call_state['n']}"},
+            )
+
+    monkeypatch.setattr("paperbanana.core.pipeline.PaperBananaPipeline", _FakePipeline)
+
+    result = runner.invoke(
+        app,
+        [
+            "sweep",
+            "--input",
+            str(input_path),
+            "--caption",
+            "Sweep caption",
+            "--vlm-providers",
+            "gemini,openai",
+            "--output-dir",
+            str(tmp_path),
+        ],
+    )
+    assert result.exit_code == 0
+    assert "Sweep Complete" in result.output
+
+    reports = list(tmp_path.glob("sweep_*/sweep_report.json"))
+    assert len(reports) == 1
+    payload = json.loads(reports[0].read_text(encoding="utf-8"))
+    assert payload["status"] == "completed"
+    assert "total_seconds" in payload
+    assert isinstance(payload["total_seconds"], (int, float))
+    assert payload["total_seconds"] >= 0
+    assert "quality_proxy_note" in payload
+    assert payload["summary"]["completed"] == 2
+    assert payload["summary"]["failed"] == 0
+    assert len(payload["results"]) == 2
+    assert all(r.get("status") == "success" for r in payload["results"])
+    ranked = payload["ranked_results"]
+    assert len(ranked) == 2
+    assert ranked[0]["variant_id"] == "variant_001"
+    assert ranked[0]["quality_proxy_score"] > ranked[1]["quality_proxy_score"]
+
+
 def test_ablate_retrieval_writes_report(monkeypatch):
     """ablate-retrieval writes a JSON report and exits cleanly."""
     from paperbanana.evaluation.retrieval_ablation import AblationReport, AblationVariantResult
@@ -260,3 +411,141 @@ def test_setup_custom_endpoint_requires_non_empty_url(monkeypatch):
         assert "URL cannot be empty" in result.output
         env_text = Path(".env").read_text(encoding="utf-8")
         assert "GOOGLE_BASE_URL=https://gemini-proxy.example.com" in env_text
+
+
+def test_batch_resume_retry_failed(tmp_path, monkeypatch):
+    """batch supports checkpoint resume with --retry-failed."""
+    input_a = tmp_path / "a.txt"
+    input_b = tmp_path / "b.txt"
+    input_a.write_text("A", encoding="utf-8")
+    input_b.write_text("B", encoding="utf-8")
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "items": [
+                    {"id": "ok", "input": str(input_a), "caption": "always ok"},
+                    {"id": "flaky", "input": str(input_b), "caption": "fails once"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    call_state = {"flaky_calls": 0}
+
+    class _FakePipeline:
+        def __init__(self, settings=None, **kwargs):
+            self.settings = settings
+
+        async def generate(self, gen_input):
+            from paperbanana.core.types import GenerationOutput, IterationRecord
+
+            if "fails once" in gen_input.communicative_intent:
+                call_state["flaky_calls"] += 1
+                if call_state["flaky_calls"] == 1:
+                    raise RuntimeError("transient boom")
+            image_path = str(tmp_path / f"{gen_input.communicative_intent.replace(' ', '_')}.png")
+            return GenerationOutput(
+                image_path=image_path,
+                description="d",
+                iterations=[IterationRecord(iteration=1, description="d", image_path=image_path)],
+                metadata={"run_id": f"run_{gen_input.communicative_intent.replace(' ', '_')}"},
+            )
+
+    monkeypatch.setattr("paperbanana.core.pipeline.PaperBananaPipeline", _FakePipeline)
+
+    first = runner.invoke(
+        app,
+        ["batch", "--manifest", str(manifest), "--output-dir", str(tmp_path)],
+    )
+    assert first.exit_code == 0
+    batches = sorted(tmp_path.glob("batch_*/batch_report.json"))
+    assert len(batches) == 1
+    batch_dir = batches[0].parent
+    first_report = json.loads(batches[0].read_text(encoding="utf-8"))
+    statuses = {item["id"]: item.get("status") for item in first_report["items"]}
+    assert statuses["ok"] == "success"
+    assert statuses["flaky"] == "failed"
+
+    second = runner.invoke(
+        app,
+        [
+            "batch",
+            "--manifest",
+            str(manifest),
+            "--output-dir",
+            str(tmp_path),
+            "--resume-batch",
+            str(batch_dir),
+            "--retry-failed",
+        ],
+    )
+    assert second.exit_code == 0
+    resumed_report = json.loads((batch_dir / "batch_report.json").read_text(encoding="utf-8"))
+    statuses = {item["id"]: item.get("status") for item in resumed_report["items"]}
+    assert statuses["ok"] == "success"
+    assert statuses["flaky"] == "success"
+
+
+def test_plot_batch_supports_concurrency_and_retries(tmp_path, monkeypatch):
+    """plot-batch writes attempts/status with retries."""
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("x,y\n1,2\n2,3\n", encoding="utf-8")
+    manifest = tmp_path / "plot_manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "items": [
+                    {"id": "p1", "data": str(data_path), "intent": "ok plot"},
+                    {"id": "p2", "data": str(data_path), "intent": "flaky plot"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    state = {"flaky_calls": 0}
+
+    class _FakePipeline:
+        def __init__(self, settings=None, **kwargs):
+            self.settings = settings
+
+        async def generate(self, gen_input):
+            from paperbanana.core.types import GenerationOutput, IterationRecord
+
+            if "flaky" in gen_input.communicative_intent:
+                state["flaky_calls"] += 1
+                if state["flaky_calls"] == 1:
+                    raise RuntimeError("temporary")
+            img = str(tmp_path / f"{gen_input.communicative_intent.replace(' ', '_')}.png")
+            return GenerationOutput(
+                image_path=img,
+                description="d",
+                iterations=[IterationRecord(iteration=1, description="d", image_path=img)],
+                metadata={"run_id": "run_plot"},
+            )
+
+    monkeypatch.setattr("paperbanana.core.pipeline.PaperBananaPipeline", _FakePipeline)
+
+    result = runner.invoke(
+        app,
+        [
+            "plot-batch",
+            "--manifest",
+            str(manifest),
+            "--output-dir",
+            str(tmp_path),
+            "--concurrency",
+            "2",
+            "--max-retries",
+            "1",
+        ],
+    )
+    assert result.exit_code == 0
+    reports = sorted(tmp_path.glob("batch_*/batch_report.json"))
+    assert len(reports) == 1
+    report = json.loads(reports[0].read_text(encoding="utf-8"))
+    assert all(item.get("status") == "success" for item in report["items"])
+    flaky = next(item for item in report["items"] if item["id"] == "p2")
+    assert flaky.get("attempts", 0) >= 2

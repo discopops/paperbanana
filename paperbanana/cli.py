@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json as json_mod
 import time
 from pathlib import Path
 from typing import Optional
@@ -15,8 +16,13 @@ import json as json_mod
 
 from paperbanana.core.config import Settings
 from paperbanana.core.logging import configure_logging
-from paperbanana.core.types import DiagramType, GenerationInput
-from paperbanana.core.utils import generate_run_id
+from paperbanana.core.types import (
+    DiagramType,
+    GenerationInput,
+    PipelineProgressEvent,
+    PipelineProgressStage,
+)
+from paperbanana.core.utils import ensure_dir, generate_run_id, save_json
 
 app = typer.Typer(
     name="paperbanana",
@@ -63,7 +69,10 @@ def _upsert_env_vars(env_path: Path, updates: dict[str, str]) -> None:
 @app.command()
 def generate(
     input: Optional[str] = typer.Option(
-        None, "--input", "-i", help="Path to methodology text file"
+        None,
+        "--input",
+        "-i",
+        help="Path to methodology text file or PDF (.pdf requires: pip install 'paperbanana[pdf]')",
     ),
     caption: Optional[str] = typer.Option(
         None, "--caption", "-c", help="Figure caption / communicative intent"
@@ -114,6 +123,16 @@ def generate(
         "--save-prompts/--no-save-prompts",
         help="Save formatted prompts into the run directory (for debugging)",
     ),
+    cost_only: bool = typer.Option(
+        False,
+        "--cost-only",
+        help="Estimate cost without making API calls (implies --dry-run)",
+    ),
+    budget: Optional[float] = typer.Option(
+        None,
+        "--budget",
+        help="Budget cap in USD; pipeline aborts gracefully when exceeded",
+    ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
@@ -122,7 +141,7 @@ def generate(
     auto_download_data: bool = typer.Option(
         False,
         "--auto-download-data",
-        help="Auto-download expanded reference set (~257MB) on first run if not cached",
+        help="Auto-download curated expansion reference set on first run if not cached",
     ),
     exemplar_retrieval: bool = typer.Option(
         False,
@@ -154,15 +173,30 @@ def generate(
         "--exemplar-retries",
         help="Retry attempts for external exemplar retrieval on transient errors",
     ),
+    prompt_dir: Optional[str] = typer.Option(
+        None,
+        "--prompt-dir",
+        help="Path to alternative prompt templates directory (for A/B testing)",
+    ),
     seed: Optional[int] = typer.Option(
         None,
         "--seed",
         help="Random seed for reproducible image generation",
     ),
+    venue: Optional[str] = typer.Option(
+        None,
+        "--venue",
+        help="Target venue style (neurips, icml, acl, ieee, custom)",
+    ),
     progress_json: bool = typer.Option(
         False,
         "--progress-json",
         help="Emit machine-readable JSON progress events to stdout during generation",
+    ),
+    pdf_pages: Optional[str] = typer.Option(
+        None,
+        "--pdf-pages",
+        help=("PDF input only: 1-based pages (e.g. '1-5', '3', '1-3,7,10-12'); default: all pages"),
     ),
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Show detailed agent progress and timing"
@@ -179,6 +213,16 @@ def generate(
     if exemplar_mode and exemplar_mode not in ("external_then_rerank", "external_only"):
         console.print(
             "[red]Error: --exemplar-mode must be external_then_rerank or external_only[/red]"
+        )
+        raise typer.Exit(1)
+    if venue and venue.lower() not in ("neurips", "icml", "acl", "ieee", "custom"):
+        console.print(
+            f"[red]Error: --venue must be neurips, icml, acl, ieee, or custom. Got: {venue}[/red]"
+        )
+        raise typer.Exit(1)
+    if pdf_pages and (continue_last or continue_run):
+        console.print(
+            "[red]Error: --pdf-pages cannot be used with --continue or --continue-run[/red]"
         )
         raise typer.Exit(1)
 
@@ -221,6 +265,12 @@ def generate(
         overrides["exemplar_retrieval_max_retries"] = exemplar_retries
     if seed is not None:
         overrides["seed"] = seed
+    if budget is not None:
+        overrides["budget_usd"] = budget
+    if venue:
+        overrides["venue"] = venue
+    if prompt_dir:
+        overrides["prompt_dir"] = prompt_dir
 
     if config:
         settings = Settings.from_yaml(config, **overrides)
@@ -232,20 +282,20 @@ def generate(
 
     from paperbanana.core.pipeline import PaperBananaPipeline
 
-    # ── Auto-download expanded reference set if requested ──────────────
+    # ── Auto-download curated expansion if requested ────────────────────
     if auto_download_data:
         from paperbanana.data.manager import DatasetManager
 
         dm = DatasetManager(cache_dir=settings.cache_dir)
         if not dm.is_downloaded():
             console.print()
-            console.print("  [dim]●[/dim] Downloading expanded reference set (~257MB)...", end="")
+            console.print("  [dim]●[/dim] Downloading curated expansion set...", end="")
             try:
-                count = dm.download()
+                count = dm.download(dataset="curated")
                 console.print(f" [green]✓[/green] [dim]{count} examples cached[/dim]")
             except Exception as e:
                 console.print(f" [red]✗[/red] Download failed: {e}")
-                console.print("    [dim]Falling back to built-in reference set (13 examples)[/dim]")
+                console.print("    [dim]Falling back to built-in reference set[/dim]")
 
     # ── Continue-run mode ─────────────────────────────────────────
     if continue_run is not None or continue_last:
@@ -281,41 +331,50 @@ def generate(
 
         console.print()
 
-        async def _run_continue():
-            pipeline = PaperBananaPipeline(settings=settings)
-
-            orig_visualizer_run = pipeline.visualizer.run
-            orig_critic_run = pipeline.critic.run
-
-            async def _visualizer_run(*a, **kw):
-                iteration = kw.get("iteration", "")
-                console.print(f"  [dim]●[/dim] Generating image (iter {iteration})...", end="")
-                t = time.perf_counter()
-                result = await orig_visualizer_run(*a, **kw)
-                console.print(f" [green]✓[/green] [dim]{time.perf_counter() - t:.1f}s[/dim]")
-                return result
-
-            async def _critic_run(*a, **kw):
+        def on_progress(event: PipelineProgressEvent) -> None:
+            if event.stage == PipelineProgressStage.VISUALIZER_START:
+                extra = event.extra or {}
+                total = extra.get("total_iterations", 0)
+                if event.iteration and total:
+                    label = f"{event.iteration}/{total}"
+                else:
+                    label = str(event.iteration or "")
+                if settings.auto_refine:
+                    label += " (auto)"
+                console.print(
+                    f"  [dim]●[/dim] Generating image (iter {event.iteration})...",
+                    end="",
+                )
+            elif event.stage == PipelineProgressStage.VISUALIZER_END:
+                console.print(
+                    f" [green]✓[/green] [dim]{event.seconds:.1f}s[/dim]"
+                    if event.seconds is not None
+                    else " [green]✓[/green]"
+                )
+            elif event.stage == PipelineProgressStage.CRITIC_START:
                 console.print("  [dim]●[/dim] Critic reviewing...", end="")
-                t = time.perf_counter()
-                result = await orig_critic_run(*a, **kw)
-                elapsed = time.perf_counter() - t
-                console.print(f" [green]✓[/green] [dim]{elapsed:.1f}s[/dim]")
-                if result.needs_revision:
+            elif event.stage == PipelineProgressStage.CRITIC_END:
+                console.print(
+                    f" [green]✓[/green] [dim]{event.seconds:.1f}s[/dim]"
+                    if event.seconds is not None
+                    else " [green]✓[/green]"
+                )
+                extra = event.extra or {}
+                if extra.get("needs_revision"):
                     console.print(
-                        f"    [yellow]↻[/yellow] Revision needed: [dim]{result.summary}[/dim]"
+                        "    [yellow]↻[/yellow] Revision needed: "
+                        f"[dim]{extra.get('summary', '')}[/dim]"
                     )
                 else:
                     console.print("    [green]✓[/green] [bold green]Critic satisfied[/bold green]")
-                return result
 
-            pipeline.visualizer.run = _visualizer_run
-            pipeline.critic.run = _critic_run
-
+        async def _run_continue():
+            pipeline = PaperBananaPipeline(settings=settings)
             return await pipeline.continue_run(
                 resume_state=resume_state,
                 additional_iterations=iterations,
                 user_feedback=feedback,
+                progress_callback=on_progress,
             )
 
         result = asyncio.run(_run_continue())
@@ -333,13 +392,22 @@ def generate(
         console.print("[red]Error: --caption is required for new runs[/red]")
         raise typer.Exit(1)
 
-    # Load source text
+    # Load source text (plain UTF-8 or PDF)
     input_path = Path(input)
     if not input_path.exists():
         console.print(f"[red]Error: Input file not found: {input}[/red]")
         raise typer.Exit(1)
 
-    source_context = input_path.read_text(encoding="utf-8")
+    from paperbanana.core.source_loader import load_methodology_source
+
+    try:
+        source_context = load_methodology_source(input_path, pdf_pages=pdf_pages)
+    except ImportError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+    except ValueError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
 
     # Build generation input
     gen_input = GenerationInput(
@@ -352,16 +420,44 @@ def generate(
     # Determine expected output file extension based on settings.output_format
     output_ext = "jpg" if settings.output_format == "jpeg" else settings.output_format
 
+    if cost_only:
+        from paperbanana.core.cost_estimator import estimate_cost
+
+        estimate = estimate_cost(settings, gen_input.diagram_type)
+        iter_est = (
+            f"auto (max {settings.max_iterations})"
+            if settings.auto_refine
+            else str(settings.refinement_iterations)
+        )
+        lines = [
+            "[bold]PaperBanana[/bold] - Cost Estimate\n",
+            f"VLM: {settings.vlm_provider} / {settings.effective_vlm_model}",
+            f"Image: {settings.image_provider} / {settings.effective_image_model}",
+            f"Iterations: {iter_est}",
+            f"Optimize: {'yes' if settings.optimize_inputs else 'no'}",
+            "",
+            f"Estimated VLM calls: {estimate['vlm_calls']}",
+            f"Estimated image calls: {estimate['image_calls']}",
+            f"[bold]Estimated cost: ${estimate['estimated_total_usd']:.4f}[/bold]",
+        ]
+        if estimate.get("pricing_note"):
+            lines.append(f"\n[yellow]Note: {estimate['pricing_note']}[/yellow]")
+        console.print(Panel.fit("\n".join(lines), border_style="green"))
+        return
+
     if dry_run:
         expected_output = (
             Path(output)
             if output
             else Path(settings.output_dir) / generate_run_id() / f"final_output.{output_ext}"
         )
+        pdf_note = ""
+        if input_path.suffix.lower() == ".pdf":
+            pdf_note = f"\nPDF pages: {pdf_pages.strip() if pdf_pages else 'all'}"
         console.print(
             Panel.fit(
                 "[bold]PaperBanana[/bold] - Dry Run\n\n"
-                f"Input: {input_path}\n"
+                f"Input: {input_path}{pdf_note}\n"
                 f"Caption: {caption}\n"
                 f"VLM: {settings.vlm_provider} / {settings.vlm_model}\n"
                 f"Image: {settings.image_provider} / {settings.image_model}\n"
@@ -412,96 +508,85 @@ def generate(
                 "  [dim]Using built-in reference set"
                 f" ({ref_count} examples). For better results:[/dim]"
             )
-            console.print("  [dim]  paperbanana data download   # or --auto-download-data[/dim]")
+            console.print(
+                "  [dim]  paperbanana data download --curated   # or --auto-download-data[/dim]"
+            )
 
-        if not progress_json:
-            # Patch agents to print step-by-step progress with timing
-            orig_optimizer_run = pipeline.optimizer.run
-            orig_retriever_run = pipeline.retriever.run
-            orig_planner_run = pipeline.planner.run
-            orig_stylist_run = pipeline.stylist.run
-            orig_visualizer_run = pipeline.visualizer.run
-            orig_critic_run = pipeline.critic.run
-
-            async def _optimizer_run(*a, **kw):
+        def on_progress(event: PipelineProgressEvent) -> None:
+            if event.stage == PipelineProgressStage.OPTIMIZER_START:
+                console.print("[bold]Phase 0[/bold] — Input Optimization")
                 console.print("  [dim]●[/dim] Optimizing inputs (parallel)...", end="")
-                t = time.perf_counter()
-                result = await orig_optimizer_run(*a, **kw)
-                console.print(f" [green]✓[/green] [dim]{time.perf_counter() - t:.1f}s[/dim]")
-                return result
-
-            async def _retriever_run(*a, **kw):
-                console.print("  [dim]●[/dim] Retrieving examples...", end="")
-                t = time.perf_counter()
-                result = await orig_retriever_run(*a, **kw)
+            elif event.stage == PipelineProgressStage.OPTIMIZER_END:
                 console.print(
-                    f" [green]✓[/green] [dim]{time.perf_counter() - t:.1f}s"
-                    f" ({len(result)} examples)[/dim]"
+                    f" [green]✓[/green] [dim]{event.seconds:.1f}s[/dim]"
+                    if event.seconds is not None
+                    else ""
                 )
-                return result
-
-            async def _planner_run(*a, **kw):
+            elif event.stage == PipelineProgressStage.RETRIEVER_START:
+                console.print("[bold]Phase 1[/bold] — Planning")
+                console.print("  [dim]●[/dim] Retrieving examples...", end="")
+            elif event.stage == PipelineProgressStage.RETRIEVER_END:
+                extra = event.extra or {}
+                n = extra.get("examples_count", 0)
+                console.print(
+                    f" [green]✓[/green] [dim]{event.seconds:.1f}s ({n} examples)[/dim]"
+                    if event.seconds is not None
+                    else f" [green]✓[/green] [dim]({n} examples)[/dim]"
+                )
+            elif event.stage == PipelineProgressStage.PLANNER_START:
                 console.print("  [dim]●[/dim] Planning description...", end="")
-                t = time.perf_counter()
-                result = await orig_planner_run(*a, **kw)
-                desc, ratio = result
-                info = f"{len(desc)} chars"
+            elif event.stage == PipelineProgressStage.PLANNER_END:
+                extra = event.extra or {}
+                ratio = extra.get("recommended_ratio")
+                info = f"{event.seconds:.1f}s" if event.seconds is not None else ""
                 if ratio:
                     info += f", ratio={ratio}"
-                elapsed = time.perf_counter() - t
-                console.print(f" [green]\u2713[/green] [dim]{elapsed:.1f}s ({info})[/dim]")
-                return result
-
-            async def _stylist_run(*a, **kw):
+                console.print(f" [green]✓[/green] [dim]{info}[/dim]")
+            elif event.stage == PipelineProgressStage.STYLIST_START:
                 console.print("  [dim]●[/dim] Styling description...", end="")
-                t = time.perf_counter()
-                result = await orig_stylist_run(*a, **kw)
-                console.print(f" [green]✓[/green] [dim]{time.perf_counter() - t:.1f}s[/dim]")
-                return result
-
-            async def _visualizer_run(*a, **kw):
-                iteration = kw.get("iteration", "")
-                total = (
-                    settings.max_iterations
-                    if settings.auto_refine
-                    else settings.refinement_iterations
+            elif event.stage == PipelineProgressStage.STYLIST_END:
+                console.print(
+                    f" [green]✓[/green] [dim]{event.seconds:.1f}s[/dim]"
+                    if event.seconds is not None
+                    else " [green]✓[/green]"
                 )
-                label = f"{iteration}/{total}"
+            elif event.stage == PipelineProgressStage.VISUALIZER_START:
+                if event.iteration == 1:
+                    console.print("[bold]Phase 2[/bold] — Iterative Refinement")
+                extra = event.extra or {}
+                total = extra.get("total_iterations", 0)
+                if event.iteration and total:
+                    label = f"{event.iteration}/{total}"
+                else:
+                    label = str(event.iteration or "")
                 if settings.auto_refine:
                     label += " (auto)"
-                if iteration == 1:
-                    console.print("[bold]Phase 2[/bold] — Iterative Refinement")
                 console.print(f"  [dim]●[/dim] Generating image [{label}]...", end="")
-                t = time.perf_counter()
-                result = await orig_visualizer_run(*a, **kw)
-                console.print(f" [green]✓[/green] [dim]{time.perf_counter() - t:.1f}s[/dim]")
-                return result
-
-            async def _critic_run(*a, **kw):
+            elif event.stage == PipelineProgressStage.VISUALIZER_END:
+                console.print(
+                    f" [green]✓[/green] [dim]{event.seconds:.1f}s[/dim]"
+                    if event.seconds is not None
+                    else " [green]✓[/green]"
+                )
+            elif event.stage == PipelineProgressStage.CRITIC_START:
                 console.print("  [dim]●[/dim] Critic reviewing...", end="")
-                t = time.perf_counter()
-                result = await orig_critic_run(*a, **kw)
-                elapsed = time.perf_counter() - t
-                console.print(f" [green]✓[/green] [dim]{elapsed:.1f}s[/dim]")
-                if result.needs_revision:
-                    for s in result.critic_suggestions[:3]:
+            elif event.stage == PipelineProgressStage.CRITIC_END:
+                console.print(
+                    f" [green]✓[/green] [dim]{event.seconds:.1f}s[/dim]"
+                    if event.seconds is not None
+                    else " [green]✓[/green]"
+                )
+                extra = event.extra or {}
+                if extra.get("needs_revision"):
+                    for s in (extra.get("critic_suggestions") or [])[:3]:
                         console.print(f"    [yellow]↻[/yellow] [dim]{s}[/dim]")
                 else:
                     console.print("    [green]✓[/green] [bold green]Critic satisfied[/bold green]")
-                return result
 
-            pipeline.optimizer.run = _optimizer_run
-            pipeline.retriever.run = _retriever_run
-            pipeline.planner.run = _planner_run
-            pipeline.stylist.run = _stylist_run
-            pipeline.visualizer.run = _visualizer_run
-            pipeline.critic.run = _critic_run
-
-            if settings.optimize_inputs:
-                console.print("[bold]Phase 0[/bold] — Input Optimization")
-            console.print("[bold]Phase 1[/bold] — Planning")
-
-        return await pipeline.generate(gen_input)
+        return await pipeline.generate(
+            gen_input,
+            progress_callback=on_progress if not progress_json else None,
+        )
 
     result = asyncio.run(_run_with_progress())
     total_elapsed = time.perf_counter() - total_start
@@ -512,6 +597,308 @@ def generate(
     )
     console.print(f"  Output: [bold]{result.image_path}[/bold]")
     console.print(f"  Run ID: [dim]{result.metadata.get('run_id', 'unknown')}[/dim]")
+
+    cost_data = result.metadata.get("cost")
+    if cost_data:
+        console.print(
+            f"  Cost:   [bold]${cost_data['total_usd']:.4f}[/bold]"
+            f" [dim](VLM: ${cost_data['vlm_usd']:.4f},"
+            f" Image: ${cost_data['image_usd']:.4f})[/dim]"
+        )
+        if cost_data.get("budget_exceeded"):
+            console.print(
+                f"  [yellow]Budget exceeded: ${cost_data['total_usd']:.4f}"
+                f" / ${cost_data.get('budget_usd', '?')}[/yellow]"
+            )
+        elif not cost_data.get("pricing_complete", True):
+            console.print(
+                "  [yellow]Note: Some model prices unknown; actual cost may differ[/yellow]"
+            )
+
+
+@app.command()
+def sweep(
+    input: str = typer.Option(
+        ...,
+        "--input",
+        "-i",
+        help="Path to methodology text file or PDF (.pdf requires: pip install 'paperbanana[pdf]')",
+    ),
+    caption: str = typer.Option(
+        ...,
+        "--caption",
+        "-c",
+        help="Figure caption / communicative intent",
+    ),
+    pdf_pages: Optional[str] = typer.Option(
+        None,
+        "--pdf-pages",
+        help=("PDF input only: 1-based pages (e.g. '1-5', '3', '1-3,7'); default: all pages"),
+    ),
+    output_dir: str = typer.Option(
+        "outputs",
+        "--output-dir",
+        "-o",
+        help="Parent directory for sweep outputs (sweep_<id> will be created here)",
+    ),
+    config: Optional[str] = typer.Option(None, "--config", help="Path to config YAML file"),
+    vlm_providers: Optional[str] = typer.Option(
+        None,
+        "--vlm-providers",
+        help="Comma-separated VLM providers (e.g. gemini,openai)",
+    ),
+    vlm_models: Optional[str] = typer.Option(
+        None,
+        "--vlm-models",
+        help="Comma-separated VLM models (paired as full cartesian combinations)",
+    ),
+    image_providers: Optional[str] = typer.Option(
+        None,
+        "--image-providers",
+        help="Comma-separated image providers (e.g. google_imagen,openai_imagen)",
+    ),
+    image_models: Optional[str] = typer.Option(
+        None,
+        "--image-models",
+        help="Comma-separated image models (paired as full cartesian combinations)",
+    ),
+    iterations: Optional[str] = typer.Option(
+        None,
+        "--iterations",
+        help="Comma-separated refinement iterations (e.g. 2,3,4)",
+    ),
+    optimize_modes: Optional[str] = typer.Option(
+        None,
+        "--optimize-modes",
+        help="Comma-separated booleans for optimize_inputs axis (e.g. on,off)",
+    ),
+    auto_modes: Optional[str] = typer.Option(
+        None,
+        "--auto-modes",
+        help="Comma-separated booleans for auto_refine axis (e.g. off,on)",
+    ),
+    max_variants: Optional[int] = typer.Option(
+        None,
+        "--max-variants",
+        help="Optional cap on total generated variants",
+    ),
+    format: str = typer.Option(
+        "png",
+        "--format",
+        "-f",
+        help="Output image format (png, jpeg, webp)",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Show planned variant matrix without API calls",
+    ),
+    auto_download_data: bool = typer.Option(
+        False,
+        "--auto-download-data",
+        help="Auto-download expanded reference set (~257MB) on first run if not cached",
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed progress"),
+):
+    """Run a parameter sweep for one input and rank generated variants.
+
+    Successful variants are ranked by *quality_proxy_score*: max(0, 100 − 12.5 × N) where N is
+    the number of critic suggestions on the **final** refinement iteration. This is a rough
+    proxy for comparing runs, not a substitute for human evaluation.
+    """
+    if format not in ("png", "jpeg", "webp"):
+        console.print(f"[red]Error: Format must be png, jpeg, or webp. Got: {format}[/red]")
+        raise typer.Exit(1)
+    if max_variants is not None and max_variants < 1:
+        console.print("[red]Error: --max-variants must be >= 1[/red]")
+        raise typer.Exit(1)
+
+    configure_logging(verbose=verbose)
+
+    input_path = Path(input)
+    if not input_path.exists():
+        console.print(f"[red]Error: Input file not found: {input}[/red]")
+        raise typer.Exit(1)
+
+    from dotenv import load_dotenv
+
+    load_dotenv()
+
+    from paperbanana.core.source_loader import load_methodology_source
+    from paperbanana.core.sweep import (
+        build_sweep_variants,
+        parse_csv_bools,
+        parse_csv_ints,
+        parse_csv_values,
+        quality_proxy_score,
+        rank_sweep_results,
+        summarize_sweep,
+    )
+
+    try:
+        variant_list = build_sweep_variants(
+            vlm_providers=parse_csv_values(vlm_providers),
+            vlm_models=parse_csv_values(vlm_models),
+            image_providers=parse_csv_values(image_providers),
+            image_models=parse_csv_values(image_models),
+            refinement_iterations=parse_csv_ints(iterations, field_name="--iterations"),
+            optimize_inputs=parse_csv_bools(optimize_modes, field_name="--optimize-modes"),
+            auto_refine=parse_csv_bools(auto_modes, field_name="--auto-modes"),
+            max_variants=max_variants,
+        )
+    except ValueError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+    if not variant_list:
+        console.print("[red]Error: Sweep generated zero variants[/red]")
+        raise typer.Exit(1)
+
+    try:
+        source_context = load_methodology_source(input_path, pdf_pages=pdf_pages)
+    except (ImportError, ValueError) as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+    sweep_id = f"sweep_{generate_run_id()}"
+    sweep_dir = ensure_dir(Path(output_dir) / sweep_id)
+    iter_label = f"{len(variant_list)} variants"
+    console.print(
+        Panel.fit(
+            f"[bold]PaperBanana[/bold] — Parameter Sweep\n\n"
+            f"Input: {input_path.name}\n"
+            f"Caption: {caption}\n"
+            f"Plan: {iter_label}\n"
+            f"Output: {sweep_dir}",
+            border_style="magenta",
+        )
+    )
+
+    if dry_run:
+        preview = [variant.as_dict() for variant in variant_list[: min(10, len(variant_list))]]
+        report = {
+            "sweep_id": sweep_id,
+            "status": "dry_run",
+            "total_variants": len(variant_list),
+            "preview": preview,
+        }
+        report_path = sweep_dir / "sweep_report.json"
+        save_json(report, report_path)
+        console.print(f"\n[green]Dry run complete.[/green] Planned {len(variant_list)} variants")
+        console.print(f"  Report: [bold]{report_path}[/bold]")
+        return
+
+    from paperbanana.core.pipeline import PaperBananaPipeline
+
+    if config:
+        base_settings = Settings.from_yaml(config)
+    else:
+        base_settings = Settings()
+
+    if auto_download_data:
+        from paperbanana.data.manager import DatasetManager
+
+        dm = DatasetManager(cache_dir=base_settings.cache_dir)
+        if not dm.is_downloaded():
+            console.print("  [dim]Downloading expanded reference set...[/dim]")
+            try:
+                dm.download()
+            except Exception as e:
+                console.print(f"  [yellow]Download failed: {e}, using built-in set[/yellow]")
+
+    all_results: list[dict] = []
+    total_start = time.perf_counter()
+
+    for idx, variant in enumerate(variant_list, start=1):
+        variant_dir = ensure_dir(sweep_dir / variant.variant_id)
+        overrides: dict = {
+            "output_dir": str(variant_dir),
+            "output_format": format,
+            "vlm_provider": variant.vlm_provider,
+            "image_provider": variant.image_provider,
+            "refinement_iterations": variant.refinement_iterations,
+            "optimize_inputs": variant.optimize_inputs,
+            "auto_refine": variant.auto_refine,
+        }
+        if variant.vlm_model:
+            overrides["vlm_model"] = variant.vlm_model
+        if variant.image_model:
+            overrides["image_model"] = variant.image_model
+
+        settings = base_settings.model_copy(update=overrides)
+
+        gen_input = GenerationInput(
+            source_context=source_context,
+            communicative_intent=caption,
+            diagram_type=DiagramType.METHODOLOGY,
+        )
+        console.print(f"[bold]Variant {idx}/{len(variant_list)}[/bold] — {variant.variant_id}")
+
+        try:
+            variant_start = time.perf_counter()
+            pipeline = PaperBananaPipeline(settings=settings)
+            result = asyncio.run(pipeline.generate(gen_input))
+            variant_seconds = time.perf_counter() - variant_start
+            final_critique = result.iterations[-1].critique if result.iterations else None
+            suggestion_count = len(final_critique.critic_suggestions) if final_critique else 0
+            quality_proxy = quality_proxy_score(suggestion_count)
+            all_results.append(
+                {
+                    "status": "success",
+                    **variant.as_dict(),
+                    "run_id": result.metadata.get("run_id"),
+                    "output_path": result.image_path,
+                    "iterations_used": len(result.iterations),
+                    "critic_suggestions": suggestion_count,
+                    "quality_proxy_score": round(quality_proxy, 2),
+                    "total_seconds": round(variant_seconds, 2),
+                }
+            )
+            console.print(
+                f"  [green]✓[/green] score={quality_proxy:.1f} [dim]{variant_seconds:.1f}s[/dim]"
+            )
+        except Exception as e:
+            all_results.append(
+                {
+                    "status": "failed",
+                    **variant.as_dict(),
+                    "error": str(e),
+                }
+            )
+            console.print(f"  [red]✗[/red] {e}")
+
+    successful = [item for item in all_results if item["status"] == "success"]
+    ranked_results = rank_sweep_results(successful)
+    summary = summarize_sweep(all_results)
+    elapsed = time.perf_counter() - total_start
+    report = {
+        "sweep_id": sweep_id,
+        "status": "completed",
+        "input": str(input_path),
+        "caption": caption,
+        "total_seconds": round(elapsed, 2),
+        "summary": summary,
+        "results": all_results,
+        "ranked_results": ranked_results,
+        "quality_proxy_note": (
+            "quality_proxy_score = max(0, 100 - 12.5 * N) where N is critic suggestion "
+            "count on the final iteration"
+        ),
+    }
+    report_path = sweep_dir / "sweep_report.json"
+    save_json(report, report_path)
+
+    console.print(
+        Panel.fit(
+            "[bold]Sweep Complete[/bold]\n\n"
+            f"Completed: {summary.get('completed', 0)}\n"
+            f"Failed: {summary.get('failed', 0)}\n"
+            f"Best variant: {summary.get('best_variant')}\n"
+            f"Mean proxy score: {summary.get('mean_quality_proxy_score')}\n"
+            f"Report: {report_path}",
+            border_style="cyan",
+        )
+    )
 
 
 @app.command()
@@ -550,14 +937,40 @@ def batch(
     save_prompts: Optional[bool] = typer.Option(
         None, "--save-prompts/--no-save-prompts", help="Save prompts per run"
     ),
-    auto_download_data: bool = typer.Option(
-        False, "--auto-download-data", help="Auto-download reference set if needed"
+    venue: Optional[str] = typer.Option(
+        None,
+        "--venue",
+        help="Target venue style (neurips, icml, acl, ieee, custom)",
     ),
+    auto_download_data: bool = typer.Option(
+        False, "--auto-download-data", help="Auto-download curated expansion if needed"
+    ),
+    resume_batch: Optional[str] = typer.Option(
+        None, "--resume-batch", help="Batch ID or batch directory to resume"
+    ),
+    retry_failed: bool = typer.Option(
+        False, "--retry-failed", help="Retry previously failed items during resume"
+    ),
+    max_retries: int = typer.Option(
+        0, "--max-retries", help="Extra retries per item after first failure"
+    ),
+    concurrency: int = typer.Option(1, "--concurrency", help="Parallel item workers"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed progress"),
 ):
     """Generate multiple methodology diagrams from a manifest file (YAML or JSON)."""
     if format not in ("png", "jpeg", "webp"):
         console.print(f"[red]Error: Format must be png, jpeg, or webp. Got: {format}[/red]")
+        raise typer.Exit(1)
+    if venue and venue.lower() not in ("neurips", "icml", "acl", "ieee", "custom"):
+        console.print(
+            f"[red]Error: --venue must be neurips, icml, acl, ieee, or custom. Got: {venue}[/red]"
+        )
+        raise typer.Exit(1)
+    if max_retries < 0:
+        console.print("[red]Error: --max-retries must be >= 0[/red]")
+        raise typer.Exit(1)
+    if concurrency < 1:
+        console.print("[red]Error: --concurrency must be >= 1[/red]")
         raise typer.Exit(1)
 
     configure_logging(verbose=verbose)
@@ -566,8 +979,17 @@ def batch(
         console.print(f"[red]Error: Manifest not found: {manifest}[/red]")
         raise typer.Exit(1)
 
-    from paperbanana.core.batch import generate_batch_id, load_batch_manifest
-    from paperbanana.core.utils import ensure_dir, save_json
+    from paperbanana.core.batch import (
+        checkpoint_progress,
+        generate_batch_id,
+        init_or_load_checkpoint,
+        load_batch_manifest,
+        mark_item_failure,
+        mark_item_running,
+        mark_item_success,
+        select_items_for_run,
+    )
+    from paperbanana.core.utils import ensure_dir
 
     try:
         items = load_batch_manifest(manifest_path)
@@ -575,8 +997,18 @@ def batch(
         console.print(f"[red]Error loading manifest: {e}[/red]")
         raise typer.Exit(1)
 
-    batch_id = generate_batch_id()
-    batch_dir = Path(output_dir) / batch_id
+    is_resume = bool(resume_batch)
+    if is_resume:
+        resume_ref = Path(resume_batch)
+        if resume_ref.is_dir():
+            batch_dir = resume_ref.resolve()
+            batch_id = batch_dir.name
+        else:
+            batch_id = resume_batch.strip()
+            batch_dir = (Path(output_dir) / batch_id).resolve()
+    else:
+        batch_id = generate_batch_id()
+        batch_dir = (Path(output_dir) / batch_id).resolve()
     ensure_dir(batch_dir)
 
     overrides = {"output_dir": str(batch_dir), "output_format": format}
@@ -598,6 +1030,8 @@ def batch(
         overrides["optimize_inputs"] = True
     if save_prompts is not None:
         overrides["save_prompts"] = save_prompts
+    if venue:
+        overrides["venue"] = venue
 
     if config:
         settings = Settings.from_yaml(config, **overrides)
@@ -612,83 +1046,131 @@ def batch(
 
         dm = DatasetManager(cache_dir=settings.cache_dir)
         if not dm.is_downloaded():
-            console.print("  [dim]Downloading expanded reference set...[/dim]")
+            console.print("  [dim]Downloading curated expansion set...[/dim]")
             try:
-                dm.download()
+                dm.download(dataset="curated")
             except Exception as e:
                 console.print(f"  [yellow]Download failed: {e}, using built-in set[/yellow]")
 
     console.print(
         Panel.fit(
-            f"[bold]PaperBanana[/bold] — Batch Generation\n\n"
+            f"[bold]PaperBanana[/bold] — {'Resume ' if is_resume else ''}Batch Generation\n\n"
             f"Manifest: {manifest_path.name}\n"
             f"Items: {len(items)}\n"
-            f"Output: {batch_dir}",
+            f"Output: {batch_dir}\n"
+            f"Concurrency: {concurrency}",
             border_style="blue",
         )
     )
     console.print()
 
     from paperbanana.core.pipeline import PaperBananaPipeline
+    from paperbanana.core.source_loader import load_methodology_source
 
-    report = {"batch_id": batch_id, "manifest": str(manifest_path), "items": []}
-    total_start = time.perf_counter()
-
-    for idx, item in enumerate(items):
-        item_id = item["id"]
-        input_path = Path(item["input"])
-        if not input_path.exists():
-            console.print(f"[red]Skipping item '{item_id}': input not found: {input_path}[/red]")
-            report["items"].append(
-                {
-                    "id": item_id,
-                    "input": item["input"],
-                    "caption": item["caption"],
-                    "run_id": None,
-                    "output_path": None,
-                    "error": "input file not found",
-                }
-            )
-            continue
-        source_context = input_path.read_text(encoding="utf-8")
-        gen_input = GenerationInput(
-            source_context=source_context,
-            communicative_intent=item["caption"],
-            diagram_type=DiagramType.METHODOLOGY,
+    try:
+        state = init_or_load_checkpoint(
+            batch_dir=batch_dir,
+            batch_id=batch_id,
+            manifest_path=manifest_path,
+            batch_kind="methodology",
+            items=items,
+            resume=is_resume,
         )
-        console.print(f"[bold]Item {idx + 1}/{len(items)}[/bold] — {item_id}")
-        pipeline = PaperBananaPipeline(settings=settings)
-        try:
-            result = asyncio.run(pipeline.generate(gen_input))
-            report["items"].append(
-                {
-                    "id": item_id,
-                    "input": item["input"],
-                    "caption": item["caption"],
-                    "run_id": result.metadata.get("run_id"),
-                    "output_path": result.image_path,
-                    "iterations": len(result.iterations),
-                }
-            )
-            console.print(f"  [green]✓[/green] [dim]{result.image_path}[/dim]\n")
-        except Exception as e:
-            console.print(f"  [red]✗[/red] {e}\n")
-            report["items"].append(
-                {
-                    "id": item_id,
-                    "input": item["input"],
-                    "caption": item["caption"],
-                    "run_id": None,
-                    "output_path": None,
-                    "error": str(e),
-                }
-            )
+    except (FileNotFoundError, ValueError) as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+    total_start = time.perf_counter()
+    planned = select_items_for_run(state, retry_failed=retry_failed)
+    if not planned:
+        checkpoint_progress(batch_dir=batch_dir, state=state, mark_complete=True)
+        console.print("[yellow]Nothing to run: all items already completed.[/yellow]")
+        console.print(f"  Report: [bold]{batch_dir / 'batch_report.json'}[/bold]")
+        return
+
+    async def _run_all() -> None:
+        sem = asyncio.Semaphore(concurrency)
+
+        async def _run_one(idx: int, item: dict[str, object]) -> None:
+            item_key = str(item["_item_key"])
+            item_id = str(item["id"])
+            async with sem:
+                for attempt in range(max_retries + 1):
+                    mark_item_running(state, item_key)
+                    checkpoint_progress(
+                        batch_dir=batch_dir,
+                        state=state,
+                        total_seconds=time.perf_counter() - total_start,
+                    )
+                    input_path = Path(str(item["input"]))
+                    if not input_path.exists():
+                        mark_item_failure(state, item_key, "input file not found")
+                        checkpoint_progress(
+                            batch_dir=batch_dir,
+                            state=state,
+                            total_seconds=time.perf_counter() - total_start,
+                        )
+                        console.print(
+                            f"[red]Item {idx + 1}/{len(items)} {item_id}: input missing[/red]"
+                        )
+                        return
+                    try:
+                        source_context = load_methodology_source(
+                            input_path, pdf_pages=item.get("pdf_pages")
+                        )
+                        gen_input = GenerationInput(
+                            source_context=source_context,
+                            communicative_intent=str(item["caption"]),
+                            diagram_type=DiagramType.METHODOLOGY,
+                        )
+                        result = await PaperBananaPipeline(settings=settings).generate(gen_input)
+                        mark_item_success(
+                            state,
+                            item_key,
+                            result.metadata.get("run_id"),
+                            result.image_path,
+                            len(result.iterations),
+                        )
+                        checkpoint_progress(
+                            batch_dir=batch_dir,
+                            state=state,
+                            total_seconds=time.perf_counter() - total_start,
+                        )
+                        console.print(
+                            f"[green]Item {idx + 1}/{len(items)} {item_id}: ok[/green] "
+                            f"[dim]{result.image_path}[/dim]"
+                        )
+                        return
+                    except Exception as e:
+                        mark_item_failure(state, item_key, str(e))
+                        checkpoint_progress(
+                            batch_dir=batch_dir,
+                            state=state,
+                            total_seconds=time.perf_counter() - total_start,
+                        )
+                        if attempt < max_retries:
+                            console.print(
+                                f"[yellow]Item {item_id}: retry {attempt + 1}/{max_retries} "
+                                f"after {e}[/yellow]"
+                            )
+                            continue
+                        console.print(
+                            f"[red]Item {idx + 1}/{len(items)} {item_id}: failed - {e}[/red]"
+                        )
+                        return
+
+        await asyncio.gather(*[_run_one(idx, item) for idx, item, _ in planned])
+
+    asyncio.run(_run_all())
 
     total_elapsed = time.perf_counter() - total_start
-    report["total_seconds"] = round(total_elapsed, 1)
+    report = checkpoint_progress(
+        batch_dir=batch_dir,
+        state=state,
+        total_seconds=total_elapsed,
+        mark_complete=True,
+    )
     report_path = batch_dir / "batch_report.json"
-    save_json(report, report_path)
-
     succeeded = sum(1 for x in report["items"] if x.get("output_path"))
     console.print(
         f"[green]Batch complete.[/green] [dim]{total_elapsed:.1f}s · "
@@ -759,6 +1241,282 @@ def batch_report(
         raise typer.Exit(1)
 
 
+@app.command("plot-batch")
+def plot_batch(
+    manifest: str = typer.Option(
+        ..., "--manifest", "-m", help="Path to plot batch manifest (YAML or JSON)"
+    ),
+    output_dir: str = typer.Option(
+        "outputs",
+        "--output-dir",
+        "-o",
+        help="Parent directory for batch run (batch_<id> will be created here)",
+    ),
+    config: Optional[str] = typer.Option(None, "--config", help="Path to config YAML file"),
+    vlm_provider: Optional[str] = typer.Option(
+        None, "--vlm-provider", help="VLM provider (default: gemini)"
+    ),
+    vlm_model: Optional[str] = typer.Option(None, "--vlm-model", help="VLM model name"),
+    image_provider: Optional[str] = typer.Option(
+        None, "--image-provider", help="Image gen provider"
+    ),
+    image_model: Optional[str] = typer.Option(None, "--image-model", help="Image gen model name"),
+    iterations: Optional[int] = typer.Option(
+        None, "--iterations", "-n", help="Refinement iterations per plot"
+    ),
+    auto: bool = typer.Option(
+        False, "--auto", help="Loop until critic satisfied per item (with safety cap)"
+    ),
+    max_iterations: Optional[int] = typer.Option(
+        None, "--max-iterations", help="Safety cap for --auto"
+    ),
+    optimize: bool = typer.Option(
+        False, "--optimize", help="Preprocess inputs per item (enrich context, sharpen intent)"
+    ),
+    format: str = typer.Option(
+        "png", "--format", "-f", help="Output image format (png, jpeg, webp)"
+    ),
+    save_prompts: Optional[bool] = typer.Option(
+        None,
+        "--save-prompts/--no-save-prompts",
+        help="Save prompts per run",
+    ),
+    venue: Optional[str] = typer.Option(
+        None,
+        "--venue",
+        help="Target venue style (neurips, icml, acl, ieee, custom)",
+    ),
+    aspect_ratio: Optional[str] = typer.Option(
+        None,
+        "--aspect-ratio",
+        "-ar",
+        help="Default aspect ratio when not set per manifest item",
+    ),
+    resume_batch: Optional[str] = typer.Option(
+        None, "--resume-batch", help="Batch ID or batch directory to resume"
+    ),
+    retry_failed: bool = typer.Option(
+        False, "--retry-failed", help="Retry previously failed items during resume"
+    ),
+    max_retries: int = typer.Option(
+        0, "--max-retries", help="Extra retries per item after first failure"
+    ),
+    concurrency: int = typer.Option(1, "--concurrency", help="Parallel item workers"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed progress"),
+):
+    """Generate multiple statistical plots from a manifest (data + intent per item)."""
+    if format not in ("png", "jpeg", "webp"):
+        console.print(f"[red]Error: Format must be png, jpeg, or webp. Got: {format}[/red]")
+        raise typer.Exit(1)
+    if venue and venue.lower() not in ("neurips", "icml", "acl", "ieee", "custom"):
+        console.print(
+            f"[red]Error: --venue must be neurips, icml, acl, ieee, or custom. Got: {venue}[/red]"
+        )
+        raise typer.Exit(1)
+    if max_retries < 0:
+        console.print("[red]Error: --max-retries must be >= 0[/red]")
+        raise typer.Exit(1)
+    if concurrency < 1:
+        console.print("[red]Error: --concurrency must be >= 1[/red]")
+        raise typer.Exit(1)
+
+    configure_logging(verbose=verbose)
+    manifest_path = Path(manifest)
+    if not manifest_path.exists():
+        console.print(f"[red]Error: Manifest not found: {manifest}[/red]")
+        raise typer.Exit(1)
+
+    from paperbanana.core.batch import (
+        checkpoint_progress,
+        generate_batch_id,
+        init_or_load_checkpoint,
+        load_plot_batch_manifest,
+        mark_item_failure,
+        mark_item_running,
+        mark_item_success,
+        select_items_for_run,
+    )
+    from paperbanana.core.plot_data import load_statistical_plot_payload
+    from paperbanana.core.utils import ensure_dir
+
+    try:
+        items = load_plot_batch_manifest(manifest_path)
+    except (ValueError, FileNotFoundError, RuntimeError) as e:
+        console.print(f"[red]Error loading manifest: {e}[/red]")
+        raise typer.Exit(1)
+
+    is_resume = bool(resume_batch)
+    if is_resume:
+        resume_ref = Path(resume_batch)
+        if resume_ref.is_dir():
+            batch_dir = resume_ref.resolve()
+            batch_id = batch_dir.name
+        else:
+            batch_id = resume_batch.strip()
+            batch_dir = (Path(output_dir) / batch_id).resolve()
+    else:
+        batch_id = generate_batch_id()
+        batch_dir = (Path(output_dir) / batch_id).resolve()
+    ensure_dir(batch_dir)
+
+    overrides: dict = {
+        "output_dir": str(batch_dir),
+        "output_format": format,
+        "optimize_inputs": optimize,
+        "auto_refine": auto,
+    }
+    if vlm_provider:
+        overrides["vlm_provider"] = vlm_provider
+    if vlm_model:
+        overrides["vlm_model"] = vlm_model
+    if image_provider:
+        overrides["image_provider"] = image_provider
+    if image_model:
+        overrides["image_model"] = image_model
+    if iterations is not None:
+        overrides["refinement_iterations"] = iterations
+    if max_iterations is not None:
+        overrides["max_iterations"] = max_iterations
+    overrides["save_prompts"] = True if save_prompts is None else save_prompts
+    if venue:
+        overrides["venue"] = venue
+    if not vlm_provider:
+        overrides.setdefault("vlm_provider", "gemini")
+
+    if config:
+        settings = Settings.from_yaml(config, **overrides)
+    else:
+        from dotenv import load_dotenv
+
+        load_dotenv()
+        settings = Settings(**overrides)
+
+    console.print(
+        Panel.fit(
+            f"[bold]PaperBanana[/bold] — {'Resume ' if is_resume else ''}Batch Plot Generation\n\n"
+            f"Manifest: {manifest_path.name}\n"
+            f"Items: {len(items)}\n"
+            f"Output: {batch_dir}\n"
+            f"Concurrency: {concurrency}",
+            border_style="green",
+        )
+    )
+    console.print()
+
+    from paperbanana.core.pipeline import PaperBananaPipeline
+
+    try:
+        state = init_or_load_checkpoint(
+            batch_dir=batch_dir,
+            batch_id=batch_id,
+            manifest_path=manifest_path,
+            batch_kind="statistical_plot",
+            items=items,
+            resume=is_resume,
+        )
+    except (FileNotFoundError, ValueError) as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+    total_start = time.perf_counter()
+    planned = select_items_for_run(state, retry_failed=retry_failed)
+    if not planned:
+        checkpoint_progress(batch_dir=batch_dir, state=state, mark_complete=True)
+        console.print("[yellow]Nothing to run: all items already completed.[/yellow]")
+        console.print(f"  Report: [bold]{batch_dir / 'batch_report.json'}[/bold]")
+        return
+
+    async def _run_all() -> None:
+        sem = asyncio.Semaphore(concurrency)
+
+        async def _run_one(idx: int, item: dict[str, object]) -> None:
+            item_key = str(item["_item_key"])
+            item_id = str(item["id"])
+            async with sem:
+                for attempt in range(max_retries + 1):
+                    mark_item_running(state, item_key)
+                    checkpoint_progress(
+                        batch_dir=batch_dir,
+                        state=state,
+                        total_seconds=time.perf_counter() - total_start,
+                    )
+                    data_path = Path(str(item["data"]))
+                    if not data_path.exists():
+                        mark_item_failure(state, item_key, "data file not found")
+                        checkpoint_progress(
+                            batch_dir=batch_dir,
+                            state=state,
+                            total_seconds=time.perf_counter() - total_start,
+                        )
+                        console.print(
+                            f"[red]Item {idx + 1}/{len(items)} {item_id}: data missing[/red]"
+                        )
+                        return
+                    try:
+                        source_context, raw_data = load_statistical_plot_payload(data_path)
+                        ar = item.get("aspect_ratio") or aspect_ratio
+                        gen_input = GenerationInput(
+                            source_context=source_context,
+                            communicative_intent=str(item["intent"]),
+                            diagram_type=DiagramType.STATISTICAL_PLOT,
+                            raw_data={"data": raw_data},
+                            aspect_ratio=ar,
+                        )
+                        result = await PaperBananaPipeline(settings=settings).generate(gen_input)
+                        mark_item_success(
+                            state,
+                            item_key,
+                            result.metadata.get("run_id"),
+                            result.image_path,
+                            len(result.iterations),
+                        )
+                        checkpoint_progress(
+                            batch_dir=batch_dir,
+                            state=state,
+                            total_seconds=time.perf_counter() - total_start,
+                        )
+                        console.print(
+                            f"[green]Item {idx + 1}/{len(items)} {item_id}: ok[/green] "
+                            f"[dim]{result.image_path}[/dim]"
+                        )
+                        return
+                    except Exception as e:
+                        mark_item_failure(state, item_key, str(e))
+                        checkpoint_progress(
+                            batch_dir=batch_dir,
+                            state=state,
+                            total_seconds=time.perf_counter() - total_start,
+                        )
+                        if attempt < max_retries:
+                            console.print(
+                                f"[yellow]Item {item_id}: retry {attempt + 1}/{max_retries} "
+                                f"after {e}[/yellow]"
+                            )
+                            continue
+                        console.print(
+                            f"[red]Item {idx + 1}/{len(items)} {item_id}: failed - {e}[/red]"
+                        )
+                        return
+
+        await asyncio.gather(*[_run_one(idx, item) for idx, item, _ in planned])
+
+    asyncio.run(_run_all())
+
+    total_elapsed = time.perf_counter() - total_start
+    report = checkpoint_progress(
+        batch_dir=batch_dir,
+        state=state,
+        total_seconds=total_elapsed,
+        mark_complete=True,
+    )
+    report_path = batch_dir / "batch_report.json"
+    succeeded = sum(1 for x in report["items"] if x.get("output_path"))
+    console.print(
+        f"[green]Plot batch complete.[/green] [dim]{total_elapsed:.1f}s · "
+        f"{succeeded}/{len(items)} succeeded[/dim]"
+    )
+    console.print(f"  Report: [bold]{report_path}[/bold]")
+
+
 @app.command()
 def plot(
     data: str = typer.Option(..., "--data", "-d", help="Path to data file (CSV or JSON)"),
@@ -792,10 +1550,30 @@ def plot(
         "--save-prompts/--no-save-prompts",
         help="Save formatted prompts into the run directory (for debugging)",
     ),
+    venue: Optional[str] = typer.Option(
+        None,
+        "--venue",
+        help="Target venue style (neurips, icml, acl, ieee, custom)",
+    ),
+    cost_only: bool = typer.Option(
+        False,
+        "--cost-only",
+        help="Estimate cost without making API calls",
+    ),
+    budget: Optional[float] = typer.Option(
+        None,
+        "--budget",
+        help="Budget cap in USD; pipeline aborts gracefully when exceeded",
+    ),
 ):
     """Generate a statistical plot from data."""
     if format not in ("png", "jpeg", "webp"):
         console.print(f"[red]Error: Format must be png, jpeg, or webp. Got: {format}[/red]")
+        raise typer.Exit(1)
+    if venue and venue.lower() not in ("neurips", "icml", "acl", "ieee", "custom"):
+        console.print(
+            f"[red]Error: --venue must be neurips, icml, acl, ieee, or custom. Got: {venue}[/red]"
+        )
         raise typer.Exit(1)
 
     configure_logging(verbose=verbose)
@@ -804,22 +1582,13 @@ def plot(
         console.print(f"[red]Error: Data file not found: {data}[/red]")
         raise typer.Exit(1)
 
-    # Load data
-    import json as json_mod
+    from paperbanana.core.plot_data import load_statistical_plot_payload
 
-    if data_path.suffix == ".csv":
-        import pandas as pd
-
-        df = pd.read_csv(data_path)
-        raw_data = df.to_dict(orient="records")
-        source_context = (
-            f"CSV data with columns: {list(df.columns)}\n"
-            f"Rows: {len(df)}\nSample:\n{df.head().to_string()}"
-        )
-    else:
-        with open(data_path) as f:
-            raw_data = json_mod.load(f)
-        source_context = f"JSON data:\n{json_mod.dumps(raw_data, indent=2)[:2000]}"
+    try:
+        source_context, raw_data = load_statistical_plot_payload(data_path)
+    except (FileNotFoundError, ValueError) as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
 
     from dotenv import load_dotenv
 
@@ -832,6 +1601,8 @@ def plot(
         optimize_inputs=optimize,
         auto_refine=auto,
         save_prompts=True if save_prompts is None else save_prompts,
+        venue=venue,
+        budget_usd=budget,
     )
 
     gen_input = GenerationInput(
@@ -841,6 +1612,28 @@ def plot(
         raw_data={"data": raw_data},
         aspect_ratio=aspect_ratio,
     )
+
+    if cost_only:
+        from paperbanana.core.cost_estimator import estimate_cost
+
+        estimate = estimate_cost(settings, gen_input.diagram_type)
+        iter_est = (
+            f"auto (max {settings.max_iterations})"
+            if settings.auto_refine
+            else str(settings.refinement_iterations)
+        )
+        lines = [
+            "[bold]PaperBanana[/bold] - Cost Estimate (Plot)\n",
+            f"VLM: {settings.vlm_provider} / {settings.effective_vlm_model}",
+            f"Iterations: {iter_est}",
+            "",
+            f"Estimated VLM calls: {estimate['vlm_calls']}",
+            f"[bold]Estimated cost: ${estimate['estimated_total_usd']:.4f}[/bold]",
+        ]
+        if estimate.get("pricing_note"):
+            lines.append(f"\n[yellow]Note: {estimate['pricing_note']}[/yellow]")
+        console.print(Panel.fit("\n".join(lines), border_style="green"))
+        return
 
     console.print(
         Panel.fit(
@@ -859,6 +1652,13 @@ def plot(
 
     result = asyncio.run(_run())
     console.print(f"\n[green]Done![/green] Plot saved to: [bold]{result.image_path}[/bold]")
+
+    cost_data = result.metadata.get("cost")
+    if cost_data:
+        console.print(
+            f"  Cost: [bold]${cost_data['total_usd']:.4f}[/bold]"
+            f" [dim](VLM: ${cost_data['vlm_usd']:.4f})[/dim]"
+        )
 
 
 @app.command()
@@ -927,7 +1727,7 @@ def setup():
 @app.command()
 def evaluate(
     generated: str = typer.Option(..., "--generated", "-g", help="Path to generated image"),
-    context: str = typer.Option(..., "--context", help="Path to source context text file"),
+    context: str = typer.Option(..., "--context", help="Path to source context text file or PDF"),
     caption: str = typer.Option(..., "--caption", "-c", help="Figure caption"),
     reference: str = typer.Option(..., "--reference", "-r", help="Path to human reference image"),
     vlm_provider: str = typer.Option(
@@ -935,6 +1735,11 @@ def evaluate(
     ),
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Show detailed agent progress and timing"
+    ),
+    pdf_pages: Optional[str] = typer.Option(
+        None,
+        "--pdf-pages",
+        help="PDF context only: 1-based page selection (default: all pages)",
     ),
 ):
     """Evaluate a generated diagram vs human reference (comparative)."""
@@ -952,7 +1757,21 @@ def evaluate(
         console.print(f"[red]Error: Reference image not found: {reference}[/red]")
         raise typer.Exit(1)
 
-    context_text = Path(context).read_text(encoding="utf-8")
+    context_path = Path(context)
+    if not context_path.exists():
+        console.print(f"[red]Error: Context file not found: {context}[/red]")
+        raise typer.Exit(1)
+
+    from paperbanana.core.source_loader import load_methodology_source
+
+    try:
+        context_text = load_methodology_source(context_path, pdf_pages=pdf_pages)
+    except ImportError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+    except ValueError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
 
     from dotenv import load_dotenv
 
@@ -998,7 +1817,12 @@ def evaluate(
 
 @app.command("ablate-retrieval")
 def ablate_retrieval(
-    input: str = typer.Option(..., "--input", "-i", help="Path to methodology text file"),
+    input: str = typer.Option(
+        ...,
+        "--input",
+        "-i",
+        help="Path to methodology text file or PDF",
+    ),
     caption: str = typer.Option(
         ..., "--caption", "-c", help="Figure caption / communicative intent"
     ),
@@ -1039,6 +1863,11 @@ def ablate_retrieval(
     ),
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Show detailed agent progress and timing"
+    ),
+    pdf_pages: Optional[str] = typer.Option(
+        None,
+        "--pdf-pages",
+        help="PDF input only: 1-based page selection (default: all pages)",
     ),
 ):
     """Run baseline vs retrieval ablation (k sweep) and save a JSON report."""
@@ -1091,8 +1920,19 @@ def ablate_retrieval(
     else:
         settings = Settings(**overrides)
 
+    from paperbanana.core.source_loader import load_methodology_source
+
+    try:
+        source_context = load_methodology_source(input_path, pdf_pages=pdf_pages)
+    except ImportError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+    except ValueError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
     gen_input = GenerationInput(
-        source_context=input_path.read_text(encoding="utf-8"),
+        source_context=source_context,
         communicative_intent=caption,
         diagram_type=DiagramType.METHODOLOGY,
     )
@@ -1145,6 +1985,145 @@ def ablate_retrieval(
     )
 
 
+@app.command("ablate-prompts")
+def ablate_prompts(
+    variant_prompt_dir: str = typer.Option(
+        ..., "--variant-dir", help="Path to the variant prompt templates directory"
+    ),
+    baseline_prompt_dir: Optional[str] = typer.Option(
+        None, "--baseline-dir", help="Path to baseline prompt templates (default: built-in prompts)"
+    ),
+    variant_name: str = typer.Option("variant", "--variant-name", help="Label for the variant"),
+    baseline_name: str = typer.Option("baseline", "--baseline-name", help="Label for the baseline"),
+    category: Optional[str] = typer.Option(
+        None, "--category", help="Only run entries in this category"
+    ),
+    ids: Optional[str] = typer.Option(None, "--ids", help="Comma-separated entry IDs to compare"),
+    limit: Optional[int] = typer.Option(None, "--limit", help="Max entries to compare"),
+    seed: Optional[int] = typer.Option(None, "--seed", help="Random seed for reproducibility"),
+    output_report: Optional[str] = typer.Option(
+        None, "--output-report", "-o", help="Output JSON report path"
+    ),
+    config: Optional[str] = typer.Option(None, "--config", help="Path to config YAML file"),
+    vlm_provider: Optional[str] = typer.Option(None, "--vlm-provider", help="VLM provider"),
+    image_provider: Optional[str] = typer.Option(
+        None, "--image-provider", help="Image generation provider"
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed progress"),
+):
+    """Run A/B comparison of two prompt configurations and produce a scored report."""
+    configure_logging(verbose=verbose)
+
+    from dotenv import load_dotenv
+
+    load_dotenv()
+
+    overrides: dict = {}
+    if vlm_provider:
+        overrides["vlm_provider"] = vlm_provider
+    if image_provider:
+        overrides["image_provider"] = image_provider
+    if seed is not None:
+        overrides["seed"] = seed
+
+    if config:
+        settings = Settings.from_yaml(config, **overrides)
+    else:
+        settings = Settings(**overrides)
+
+    from paperbanana.evaluation.benchmark import filter_examples
+    from paperbanana.evaluation.prompt_ablation import (
+        PromptAblationRunner,
+        validate_prompt_dir,
+    )
+    from paperbanana.reference.store import ReferenceStore
+
+    try:
+        validate_prompt_dir(variant_prompt_dir)
+    except ValueError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+    if baseline_prompt_dir:
+        try:
+            validate_prompt_dir(baseline_prompt_dir)
+        except ValueError as e:
+            console.print(f"[red]Error: {e}[/red]")
+            raise typer.Exit(1)
+
+    runner = PromptAblationRunner(
+        settings,
+        baseline_prompt_dir=baseline_prompt_dir,
+        variant_prompt_dir=variant_prompt_dir,
+        baseline_name=baseline_name,
+        variant_name=variant_name,
+    )
+
+    id_list = [s.strip() for s in ids.split(",") if s.strip()] if ids else None
+    try:
+        store = ReferenceStore.from_settings(settings)
+        examples = store.get_all()
+        if not examples:
+            raise ValueError("No benchmark entries found. Run 'paperbanana data download' first.")
+        entries = filter_examples(examples, category=category, ids=id_list, limit=limit)
+    except ValueError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
+
+    if not entries:
+        console.print("[red]Error: No entries match the given filters.[/red]")
+        raise typer.Exit(1)
+
+    console.print(
+        Panel.fit(
+            f"[bold]PaperBanana[/bold] — Prompt A/B Comparison\n\n"
+            f"Baseline: {runner.baseline_prompt_dir} ({baseline_name})\n"
+            f"Variant:  {variant_prompt_dir} ({variant_name})\n"
+            f"Entries:  {len(entries)}\n"
+            f"Seed:     {settings.seed or 'none'}",
+            border_style="magenta",
+        )
+    )
+
+    report = asyncio.run(runner.run(entries))
+
+    default_path = Path(settings.output_dir) / f"prompt_ablation_{generate_run_id()}.json"
+    report_path = Path(output_report) if output_report else default_path
+    saved_path = PromptAblationRunner.save_report(report, report_path)
+
+    summary = report.summary
+    if not summary:
+        console.print("[yellow]No entries were successfully scored.[/yellow]")
+        console.print(f"\nReport: [bold]{saved_path}[/bold]")
+        return
+
+    # Display results
+    deltas = summary.get("mean_dimension_deltas", {})
+    delta_lines = []
+    for dim, delta in deltas.items():
+        sign = "+" if delta > 0 else ""
+        delta_lines.append(f"  {dim.capitalize():14s} {sign}{delta}")
+
+    console.print(
+        Panel.fit(
+            "[bold]Prompt Ablation Summary[/bold]\n\n"
+            f"Scored:           {summary.get('scored', 0)}\n"
+            f"Variant wins:     {summary.get('variant_wins', 0)}  "
+            f"({summary.get('variant_win_rate', 0)}%)\n"
+            f"Baseline wins:    {summary.get('baseline_wins', 0)}  "
+            f"({summary.get('baseline_win_rate', 0)}%)\n"
+            f"Ties:             {summary.get('ties', 0)}\n\n"
+            f"Mean baseline:    {summary.get('mean_baseline_score', 0)}/100\n"
+            f"Mean variant:     {summary.get('mean_variant_score', 0)}/100\n"
+            f"Mean delta:       {summary.get('mean_overall_delta', 0):+.1f}\n\n"
+            "[bold]Per-dimension deltas (variant - baseline):[/bold]\n" + "\n".join(delta_lines),
+            border_style="cyan",
+        )
+    )
+
+    console.print(f"\nReport: [bold]{saved_path}[/bold]")
+
+
 @app.command()
 def benchmark(
     config: Optional[str] = typer.Option(None, "--config", help="Path to config YAML file"),
@@ -1178,11 +2157,25 @@ def benchmark(
         "png", "--format", "-f", help="Output image format (png, jpeg, webp)"
     ),
     seed: Optional[int] = typer.Option(None, "--seed", help="Random seed for reproducibility"),
+    prompt_dir: Optional[str] = typer.Option(
+        None,
+        "--prompt-dir",
+        help="Path to alternative prompt templates directory",
+    ),
+    concurrency: int = typer.Option(
+        1,
+        "--concurrency",
+        "-c",
+        help="Maximum number of benchmark entries to process in parallel",
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed progress"),
 ):
     """Run generation + evaluation across PaperBananaBench entries."""
     if image_format not in ("png", "jpeg", "webp"):
         console.print(f"[red]Error: Format must be png, jpeg, or webp. Got: {image_format}[/red]")
+        raise typer.Exit(1)
+    if concurrency < 1:
+        console.print("[red]Error: --concurrency must be at least 1[/red]")
         raise typer.Exit(1)
 
     configure_logging(verbose=verbose)
@@ -1191,7 +2184,7 @@ def benchmark(
 
     load_dotenv()
 
-    overrides: dict = {"output_format": image_format}
+    overrides: dict = {"output_format": image_format, "benchmark_concurrency": concurrency}
     if vlm_provider:
         overrides["vlm_provider"] = vlm_provider
     if vlm_model:
@@ -1210,6 +2203,8 @@ def benchmark(
         overrides["output_dir"] = output_dir
     if seed is not None:
         overrides["seed"] = seed
+    if prompt_dir:
+        overrides["prompt_dir"] = prompt_dir
 
     if config:
         settings = Settings.from_yaml(config, **overrides)
@@ -1308,32 +2303,48 @@ def download(
     task: str = typer.Option(
         "diagram",
         "--task",
-        help="Which references to import: diagram, plot, or both",
+        help="Which references to import: diagram, plot, or both (full_bench only)",
+    ),
+    curated: bool = typer.Option(
+        False,
+        "--curated",
+        help="Download the lightweight curated expansion instead of the full benchmark",
     ),
     force: bool = typer.Option(False, "--force", help="Re-download even if already cached"),
 ):
-    """Download the expanded reference set from official PaperBananaBench (~257MB)."""
+    """Download an expanded reference set.
+
+    By default downloads the full PaperBananaBench (~257MB).
+    Use --curated for the lightweight curated expansion (~20-35 images).
+    """
     from paperbanana.data.manager import DatasetManager
 
+    dataset = "curated" if curated else "full_bench"
+    if curated and task != "diagram":
+        console.print("[yellow]Warning:[/yellow] --task is ignored when --curated is set.")
     dm = DatasetManager()
-    if dm.is_downloaded() and not force:
+    if dm.is_downloaded(dataset=dataset) and not force:
         info = dm.get_info() or {}
+        meta = info.get("dataset_meta", {})
+        ds_version = meta.get(dataset, {}).get("version", info.get("version", "unknown"))
         console.print(
             Panel.fit(
                 f"[bold]Reference Set — Already Cached[/bold]\n\n"
                 f"Location: {dm.reference_dir}\n"
                 f"Examples: {dm.get_example_count()}\n"
-                f"Version: {info.get('version', 'unknown')}\n"
-                f"Revision: {info.get('revision', 'unknown')}",
+                f"Version: {ds_version}\n"
+                f"Datasets: {', '.join(info.get('datasets', ['unknown']))}",
                 border_style="green",
             )
         )
         console.print("\nUse [bold]--force[/bold] to re-download.")
         return
 
-    console.print("[bold]PaperBanana[/bold] — Downloading Reference Set\n")
+    label = "Curated Expansion" if curated else "Full PaperBananaBench"
+    console.print(f"[bold]PaperBanana[/bold] — Downloading {label}\n")
     try:
         count = dm.download(
+            dataset=dataset,
             task=task,
             force=force,
             progress_callback=lambda msg: console.print(f"  [dim]●[/dim] {msg}"),
@@ -1358,17 +2369,19 @@ def info():
         console.print("\nDownload with: [bold]paperbanana data download[/bold]")
         return
 
-    console.print(
-        Panel.fit(
-            f"[bold]Cached Reference Set[/bold]\n\n"
-            f"Location: {dm.reference_dir}\n"
-            f"Examples: {dataset_info.get('example_count', '?')}\n"
-            f"Version: {dataset_info.get('version', 'unknown')}\n"
-            f"Revision: {dataset_info.get('revision', 'unknown')}\n"
-            f"Source: {dataset_info.get('source', 'unknown')}",
-            border_style="blue",
-        )
-    )
+    datasets = dataset_info.get("datasets", [])
+    meta = dataset_info.get("dataset_meta", {})
+    lines = [
+        "[bold]Cached Reference Set[/bold]\n",
+        f"Location: {dm.reference_dir}",
+        f"Examples: {dataset_info.get('example_count', '?')}",
+        f"Datasets: {', '.join(datasets) if datasets else 'unknown'}",
+    ]
+    for ds in datasets:
+        ds_meta = meta.get(ds, {})
+        lines.append(f"  {ds}: v{ds_meta.get('version', '?')} — {ds_meta.get('source', '?')}")
+
+    console.print(Panel.fit("\n".join(lines), border_style="blue"))
 
 
 @data_app.command()
@@ -1383,6 +2396,75 @@ def clear():
 
     dm.clear()
     console.print("[green]Cached reference set cleared.[/green]")
+
+
+@app.command()
+def studio(
+    host: str = typer.Option(
+        "127.0.0.1",
+        "--host",
+        help="Bind address for the Studio server",
+    ),
+    port: int = typer.Option(
+        7860,
+        "--port",
+        help="TCP port for the Studio server",
+    ),
+    share: bool = typer.Option(
+        False,
+        "--share",
+        help="Create a temporary public Gradio share link",
+    ),
+    config: Optional[str] = typer.Option(
+        None,
+        "--config",
+        help="Path to YAML config (same as CLI generate)",
+    ),
+    output_dir: str = typer.Option(
+        "outputs",
+        "--output-dir",
+        "-o",
+        help="Default output directory (overridable in the Studio UI)",
+    ),
+    root_path: Optional[str] = typer.Option(
+        None,
+        "--root-path",
+        help="Root URL path when behind a reverse proxy",
+    ),
+):
+    """Launch PaperBanana Studio — local web UI for diagrams, plots, and evaluation."""
+    try:
+        from paperbanana.studio.app import launch_studio as launch_studio_ui
+    except ImportError as e:
+        console.print(
+            "[red]PaperBanana Studio requires Gradio. Install with:[/red]\n"
+            "  pip install 'paperbanana[studio]'"
+        )
+        console.print(f"[dim]{e}[/dim]")
+        raise typer.Exit(1)
+
+    configure_logging(verbose=False)
+    from dotenv import load_dotenv
+
+    load_dotenv()
+
+    url = f"http://{host}:{port}/"
+    console.print(
+        Panel.fit(
+            f"[bold]PaperBanana Studio[/bold]\n\n"
+            f"Open in browser: [link={url}]{url}[/link]\n"
+            f"Default output directory: {output_dir}",
+            border_style="green",
+        )
+    )
+    launch_studio_ui(
+        host=host,
+        port=port,
+        share=share,
+        config_path=config,
+        default_output_dir=output_dir,
+        root_path=root_path,
+    )
 
 
 if __name__ == "__main__":

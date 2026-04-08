@@ -40,6 +40,9 @@ An agentic framework for generating publication-quality academic diagrams and st
 - Auto-refine mode and run continuation with user feedback
 - CLI, Python API, and MCP server for IDE integration
 - **Batch generation** from a manifest file (YAML/JSON) for multiple diagrams in one run
+- **Batch plots** — `paperbanana plot-batch` runs many statistical plots from one manifest (CSV/JSON per item)
+- **PDF inputs** for methodology context (optional `paperbanana[pdf]` / PyMuPDF), with per-page selection
+- **PaperBanana Studio** — local Gradio web UI (`paperbanana studio`) for diagrams, plots, evaluation, batch, and run browser
 - Claude Code skills for `/generate-diagram`, `/generate-plot`, and `/evaluate-diagram`
 
 <p align="center">
@@ -112,6 +115,17 @@ paperbanana generate \
 
 Output is saved to `outputs/run_<timestamp>/final_output.png` along with all intermediate iterations and metadata.
 
+### PaperBanana Studio (local web UI)
+
+Install the optional Gradio dependency, then start the app:
+
+```bash
+pip install 'paperbanana[studio]'
+paperbanana studio
+```
+
+Open the URL shown in the terminal (default `http://127.0.0.1:7860/`). The Studio exposes the same workflows as the CLI: methodology diagrams, statistical plots, comparative evaluation, continuing a prior run, batch manifests (methodology or **plot** batch via the Batch tab), and a simple browser for `run_*` / `batch_*` output folders. Use `--host`, `--port`, `--config`, and `--output-dir` as needed.
+
 ---
 
 ## How It Works
@@ -176,11 +190,17 @@ paperbanana generate --continue \
 # Continue a specific run
 paperbanana generate --continue-run run_20260218_125448_e7b876 \
   --iterations 3
+
+# PDF as input (install PyMuPDF: pip install 'paperbanana[pdf]')
+paperbanana generate \
+  --input paper.pdf \
+  --caption "Overview of our method" \
+  --pdf-pages "3-8"
 ```
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--input` | `-i` | Path to methodology text file (required for new runs) |
+| `--input` | `-i` | Path to methodology text file or PDF (required for new runs) |
 | `--caption` | `-c` | Figure caption / communicative intent (required for new runs) |
 | `--output` | `-o` | Output image path (default: auto-generated in `outputs/`) |
 | `--iterations` | `-n` | Number of Visualizer-Critic refinement rounds (default: 3) |
@@ -190,6 +210,7 @@ paperbanana generate --continue-run run_20260218_125448_e7b876 \
 | `--continue` | | Continue from the latest run in `outputs/` |
 | `--continue-run` | | Continue from a specific run ID |
 | `--feedback` | | User feedback for the critic when continuing a run |
+| `--pdf-pages` | | PDF input only: 1-based pages (e.g. `1-5`, `2,4,6-8`; default: all) |
 | `--vlm-provider` | | VLM provider name (default: `openai`) |
 | `--vlm-model` | | VLM model name (default: `gpt-5.2`) |
 | `--image-provider` | | Image gen provider (default: `openai_imagen`) |
@@ -232,6 +253,10 @@ items:
   - input: method2.txt
     caption: "Training pipeline"
     id: fig2
+  - input: paper.pdf
+    caption: "System overview"
+    id: fig3
+    pdf_pages: "4-9" # optional; PDF inputs only
 ```
 
 Paths in the manifest are resolved relative to the manifest file's directory.
@@ -244,6 +269,8 @@ paperbanana batch-report --batch-dir outputs/batch_20250109_123456_abc --format 
 paperbanana batch-report --batch-id batch_20250109_123456_abc --format html --output report.html
 ```
 
+Diagram batch reports include `batch_kind: methodology`; plot batches use `batch_kind: statistical_plot`. Human-readable reports (`paperbanana batch-report`) show the batch kind when present.
+
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--manifest` | `-m` | Path to manifest file (required) |
@@ -254,6 +281,47 @@ paperbanana batch-report --batch-id batch_20250109_123456_abc --format html --ou
 | `--auto` | | Loop until critic satisfied per item |
 | `--format` | `-f` | Output image format (png, jpeg, webp) |
 | `--auto-download-data` | | Download expanded reference set if needed |
+
+### `paperbanana plot-batch` -- Batch Statistical Plots
+
+Generate multiple plots from a manifest (YAML or JSON). Each item specifies a **data** file (CSV or JSON) and an **intent** string, mirroring `paperbanana plot`. Outputs live under `outputs/batch_<id>/run_<id>/` with the same `batch_report.json` and `paperbanana batch-report` workflow as diagram batches.
+
+```bash
+paperbanana plot-batch --manifest examples/plot_batch_manifest.yaml --optimize
+```
+
+Manifest format (`items` list):
+
+```yaml
+items:
+  - data: path/to/results.csv
+    intent: "Bar chart comparing accuracy across models"
+    id: fig_acc
+  - data: other.json
+    intent: "Scatter plot with trend line"
+    aspect_ratio: "16:9"   # optional per item; CLI --aspect-ratio is the default when omitted
+```
+
+Paths are resolved relative to the manifest file’s directory.
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--manifest` | `-m` | Path to manifest (required) |
+| `--output-dir` | `-o` | Parent directory for `batch_*` (default: outputs) |
+| `--config` | | Path to config YAML |
+| `--vlm-provider` | | VLM provider (default: gemini) |
+| `--vlm-model` | | VLM model override |
+| `--image-provider` | | Image gen provider |
+| `--image-model` | | Image gen model |
+| `--iterations` | `-n` | Refinement iterations per item |
+| `--auto` | | Loop until critic satisfied per item |
+| `--max-iterations` | | Safety cap for `--auto` |
+| `--optimize` | | Input optimization per item |
+| `--format` | `-f` | png, jpeg, or webp |
+| `--save-prompts` / `--no-save-prompts` | | Persist prompts (default: on, same as `plot`) |
+| `--venue` | | Venue style (neurips, icml, acl, ieee, custom) |
+| `--aspect-ratio` | `-ar` | Default aspect ratio when not set in the manifest |
+| `--verbose` | `-v` | Verbose logging |
 
 ### `paperbanana evaluate` -- Quality Assessment
 
@@ -271,12 +339,31 @@ paperbanana evaluate \
 |------|-------|-------------|
 | `--generated` | `-g` | Path to generated image (required) |
 | `--reference` | `-r` | Path to human reference image (required) |
-| `--context` | | Path to source context text file (required) |
+| `--context` | | Path to source context text file or PDF (required) |
 | `--caption` | `-c` | Figure caption (required) |
+| `--pdf-pages` | | PDF context only: 1-based page selection (default: all) |
 
 Scores on 4 dimensions (hierarchical aggregation per the paper):
 - **Primary**: Faithfulness, Readability
 - **Secondary**: Conciseness, Aesthetics
+
+### `paperbanana studio` -- Local web UI
+
+Requires `pip install 'paperbanana[studio]'` (Gradio).
+
+```bash
+paperbanana studio
+paperbanana studio --port 8080 --output-dir ./my_outputs
+```
+
+| Flag | Description |
+|------|-------------|
+| `--host` | Bind address (default `127.0.0.1`) |
+| `--port` | Port (default `7860`) |
+| `--share` | Create a temporary public Gradio link (do not use with sensitive data) |
+| `--config` | Path to YAML config |
+| `--output-dir` / `-o` | Default output directory for runs |
+| `--root-path` | URL subpath when behind a reverse proxy |
 
 ### `paperbanana setup` -- First-Time Configuration
 
@@ -317,6 +404,8 @@ result = asyncio.run(pipeline.generate(
 
 print(f"Output: {result.image_path}")
 ```
+
+**Progress callbacks:** `generate()` and `continue_run()` accept an optional `progress_callback` argument. The pipeline invokes it with `PipelineProgressEvent` objects (stage, message, seconds, iteration, extra) at each step (optimizer, retriever, planner, stylist, visualizer, critic), so you can show progress in UIs or log timing without patching agents.
 
 To continue a previous run:
 
