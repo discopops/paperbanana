@@ -49,16 +49,20 @@ class TestIndexJson:
 
     def test_no_duplicate_ids(self, index_data: dict):
         ids = [e["id"] for e in index_data["examples"]]
-        assert len(ids) == len(set(ids)), f"Duplicate IDs: {[x for x in ids if ids.count(x) > 1]}"
+        assert len(ids) == len(
+            set(ids)
+        ), f"Duplicate IDs: {[x for x in ids if ids.count(x) > 1]}"
 
     def test_every_entry_has_source_paper(self, index_data: dict):
         for e in index_data["examples"]:
-            assert "source_paper" in e and e["source_paper"], (
-                f"Entry {e['id']} missing source_paper"
-            )
+            assert (
+                "source_paper" in e and e["source_paper"]
+            ), f"Entry {e['id']} missing source_paper"
 
     def test_every_category_assigned(self, index_data: dict):
-        assigned = {e["category"] for e in index_data["examples"] if e.get("category")}
+        assigned = {
+            e["category"] for e in index_data["examples"] if e.get("category")
+        }
         missing = EXPECTED_CATEGORIES - assigned
         assert not missing, f"Categories with zero entries: {missing}"
 

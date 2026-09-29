@@ -37,7 +37,9 @@ class VisualizerAgent(BaseAgent):
         output_resolution: str = "2k",
         image_quality: str = "auto",
     ):
-        super().__init__(vlm_provider, prompt_dir, prompt_recorder=prompt_recorder)
+        super().__init__(
+            vlm_provider, prompt_dir, prompt_recorder=prompt_recorder
+        )
         self.image_gen = image_gen
         self.output_dir = Path(output_dir)
         self._last_vector_paths: dict[str, str] = {}
@@ -51,7 +53,7 @@ class VisualizerAgent(BaseAgent):
     def agent_name(self) -> str:
         return "visualizer"
 
-    async def run(
+    async def run(  # type: ignore[override]
         self,
         description: str,
         diagram_type: DiagramType = DiagramType.METHODOLOGY,
@@ -138,7 +140,9 @@ class VisualizerAgent(BaseAgent):
         )
 
         if output_path is None:
-            output_path = str(self.output_dir / f"diagram_iter_{iteration}.png")
+            output_path = str(
+                self.output_dir / f"diagram_iter_{iteration}.png"
+            )
 
         save_image(image, output_path)
         logger.info("Diagram saved", path=output_path)
@@ -251,14 +255,18 @@ class VisualizerAgent(BaseAgent):
             start = response.find("```python") + len("```python")
             end = response.find("```", start)
             if end == -1:
-                logger.warning("Plot code block is missing closing fence; using remaining response")
+                logger.warning(
+                    "Plot code block is missing closing fence; using remaining response"
+                )
                 return response[start:].strip()
             return response[start:end].strip()
         elif "```" in response:
             start = response.find("```") + 3
             end = response.find("```", start)
             if end == -1:
-                logger.warning("Plot code block is missing closing fence; using remaining response")
+                logger.warning(
+                    "Plot code block is missing closing fence; using remaining response"
+                )
                 return response[start:].strip()
             return response[start:end].strip()
         return response.strip()

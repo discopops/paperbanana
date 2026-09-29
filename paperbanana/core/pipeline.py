@@ -85,13 +85,15 @@ def _emit_progress(
     callback: Optional[Callable[[PipelineProgressEvent], None]],
     event: PipelineProgressEvent,
 ) -> None:
-    """Invoke progress callback if set; swallow errors so pipeline is not affected."""
+    """Invoke progress callback if set; swallow errors so pipeline is not affected."""  # noqa: E501
     if callback is None:
         return
     try:
         callback(event)
     except Exception:
-        logger.warning("Progress callback failed", stage=event.stage, exc_info=True)
+        logger.warning(
+            "Progress callback failed", stage=event.stage, exc_info=True
+        )
 
 
 async def _call_with_retry(label, fn, *args, max_attempts=3, **kwargs):
@@ -173,14 +175,16 @@ class PaperBananaPipeline:
         settings: Optional[Settings] = None,
         vlm_client=None,
         image_gen_fn=None,
-        progress_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+        progress_callback: Optional[
+            Callable[[str, Dict[str, Any]], None]
+        ] = None,
     ):
         """Initialize the pipeline.
 
         Args:
             settings: Configuration settings. If None, loads from env/defaults.
-            vlm_client: Optional pre-configured VLM client (for HF Spaces demo).
-            image_gen_fn: Optional image generation function (for HF Spaces demo).
+            vlm_client: Optional pre-configured VLM client (for HF Spaces demo).  # noqa: E501
+            image_gen_fn: Optional image generation function (for HF Spaces demo).  # noqa: E501
         """
         self.settings = settings or Settings()
         self.run_id = generate_run_id()
@@ -189,10 +193,12 @@ class PaperBananaPipeline:
         if self.settings.skip_ssl_verification:
             _apply_ssl_skip()
 
-        # Prompt recorder (writes formatted prompts to outputs/<run_id>/prompts/)
+        # Prompt recorder (writes formatted prompts to outputs/<run_id>/prompts/)  # noqa: E501
         self._prompt_recorder = None
         if self.settings.save_prompts:
-            self._prompt_recorder = PromptRecorder(run_dir_provider=lambda: self._run_dir)
+            self._prompt_recorder = PromptRecorder(
+                run_dir_provider=lambda: self._run_dir
+            )
 
         # Initialize providers
         if vlm_client is not None:
@@ -205,7 +211,7 @@ class PaperBananaPipeline:
             self._image_gen = ProviderRegistry.create_image_gen(self.settings)
             self._demo_mode = False
 
-        # Cost tracking (optional — active when budget is set or always for reporting)
+        # Cost tracking (optional — active when budget is set or always for reporting)  # noqa: E501
         self._cost_tracker: CostTracker | None = None
         if not self._demo_mode:
             self._cost_tracker = CostTracker(budget=self.settings.budget_usd)
@@ -216,11 +222,16 @@ class PaperBananaPipeline:
 
         # Load reference store (resolves cache → built-in fallback)
         self.reference_store = ReferenceStore.from_settings(self.settings)
-        self._external_exemplar_retriever: ExternalExemplarRetriever | None = None
-        if self.settings.exemplar_retrieval_enabled and self.settings.exemplar_retrieval_endpoint:
+        self._external_exemplar_retriever: ExternalExemplarRetriever | None = (
+            None
+        )
+        if (
+            self.settings.exemplar_retrieval_enabled
+            and self.settings.exemplar_retrieval_endpoint
+        ):
             self._external_exemplar_retriever = ExternalExemplarRetriever(
                 endpoint=self.settings.exemplar_retrieval_endpoint,
-                timeout_seconds=self.settings.exemplar_retrieval_timeout_seconds,
+                timeout_seconds=self.settings.exemplar_retrieval_timeout_seconds,  # noqa: E501
                 max_retries=self.settings.exemplar_retrieval_max_retries,
             )
 
@@ -252,13 +263,19 @@ class PaperBananaPipeline:
         prompt_dir = self._find_prompt_dir()
         self._prompt_dir = prompt_dir
         self.optimizer = InputOptimizerAgent(
-            self._vlm, prompt_dir=prompt_dir, prompt_recorder=self._prompt_recorder
+            self._vlm,
+            prompt_dir=prompt_dir,
+            prompt_recorder=self._prompt_recorder,
         )
         self.retriever = RetrieverAgent(
-            self._vlm, prompt_dir=prompt_dir, prompt_recorder=self._prompt_recorder
+            self._vlm,
+            prompt_dir=prompt_dir,
+            prompt_recorder=self._prompt_recorder,
         )
         self.planner = PlannerAgent(
-            self._vlm, prompt_dir=prompt_dir, prompt_recorder=self._prompt_recorder
+            self._vlm,
+            prompt_dir=prompt_dir,
+            prompt_recorder=self._prompt_recorder,
         )
         self.ir_planner = IRPlannerAgent(
             self._vlm, prompt_dir=prompt_dir, prompt_recorder=self._prompt_recorder
@@ -282,7 +299,9 @@ class PaperBananaPipeline:
             image_quality=self.settings.image_quality,
         )
         self.critic = CriticAgent(
-            self._vlm, prompt_dir=prompt_dir, prompt_recorder=self._prompt_recorder
+            self._vlm,
+            prompt_dir=prompt_dir,
+            prompt_recorder=self._prompt_recorder,
         )
         self.caption_agent = CaptionAgent(
             self._vlm, prompt_dir=prompt_dir, prompt_recorder=self._prompt_recorder
@@ -302,17 +321,19 @@ class PaperBananaPipeline:
     def _emit_progress(self, event: str, **payload: Any) -> None:
         """Emit a structured progress event.
 
-        Events are best-effort: any callback error is logged and ignored so that
+        Events are best-effort: any callback error is logged and ignored so that  # noqa: E501
         progress consumers cannot break the main pipeline.
         """
-        # structlog uses the positional message as the "event" field internally;
+        # structlog uses the positional message as the "event" field internally;  # noqa: E501
         # avoid passing a keyword named "event" to prevent collisions.
         logger.info("progress_event", progress_event=event, **payload)
         if self._progress_callback is not None:
             try:
                 self._progress_callback(event, payload)
             except Exception:
-                logger.warning("Progress callback raised", progress_event=event)
+                logger.warning(
+                    "Progress callback raised", progress_event=event
+                )
 
     def _check_budget(self, context: str, iteration: int | None = None) -> bool:
         """Return True if the cost tracker is over budget, logging a warning."""
@@ -333,7 +354,7 @@ class PaperBananaPipeline:
         return ensure_dir(Path(self.settings.output_dir) / self.run_id)
 
     def _find_prompt_dir(self) -> str:
-        """Find the prompts directory, preferring settings.prompt_dir if set."""
+        """Find the prompts directory, preferring settings.prompt_dir if set."""  # noqa: E501
         if self.settings.prompt_dir:
             return self.settings.prompt_dir
         return find_prompt_dir()
@@ -989,7 +1010,9 @@ class PaperBananaPipeline:
             return candidates, "fallback_error", []
 
         if not hits:
-            logger.warning("External exemplar retrieval returned no hits; using baseline retrieval")
+            logger.warning(
+                "External exemplar retrieval returned no hits; using baseline retrieval"  # noqa: E501
+            )
             return candidates, "fallback_empty", []
 
         mapped = map_external_hits_to_examples(hits, self.reference_store)
@@ -1258,7 +1281,9 @@ class PaperBananaPipeline:
     async def generate(
         self,
         input: GenerationInput,
-        progress_callback: Optional[Callable[[PipelineProgressEvent], None]] = None,
+        progress_callback: Optional[
+            Callable[[PipelineProgressEvent], None]
+        ] = None,
     ) -> GenerationOutput:
         """Run the full generation pipeline.
 
@@ -1383,7 +1408,7 @@ class PaperBananaPipeline:
 
         # ── Phase 1: Linear Planning ─────────────────────────────────
 
-        # Step 1: Retriever — find relevant examples (timer includes external call when enabled)
+        # Step 1: Retriever — find relevant examples (timer includes external call when enabled)  # noqa: E501
         logger.info("Phase 1: Retrieval")
         if self._cost_tracker:
             self._cost_tracker.set_agent("retriever")
@@ -1456,7 +1481,10 @@ class PaperBananaPipeline:
                 stage=PipelineProgressStage.RETRIEVER_END,
                 message="Retriever done",
                 seconds=retrieval_seconds,
-                extra={"examples_count": len(examples), "retrieval_mode": retrieval_mode},
+                extra={
+                    "examples_count": len(examples),
+                    "retrieval_mode": retrieval_mode,
+                },
             ),
         )
         logger.info(
@@ -1510,6 +1538,11 @@ class PaperBananaPipeline:
             seconds=round(planning_seconds, 1),
             recommended_ratio=planner_ratio,
         )
+        self._emit_progress(
+            "phase1_planning_completed",
+            seconds=round(planning_seconds, 1),
+            recommended_ratio=planner_ratio,
+        )
 
         # Step 3: Stylist — optimize description aesthetics
         logger.info("Phase 1: Styling")
@@ -1548,6 +1581,10 @@ class PaperBananaPipeline:
                 message="Stylist done",
                 seconds=styling_seconds,
             ),
+        )
+        self._emit_progress(
+            "phase1_styling_completed",
+            seconds=round(styling_seconds, 1),
         )
         self._emit_progress(
             "phase1_styling_completed",
@@ -1869,13 +1906,15 @@ class PaperBananaPipeline:
         resume_state,
         additional_iterations: Optional[int] = None,
         user_feedback: Optional[str] = None,
-        progress_callback: Optional[Callable[[PipelineProgressEvent], None]] = None,
+        progress_callback: Optional[
+            Callable[[PipelineProgressEvent], None]
+        ] = None,
     ) -> GenerationOutput:
         """Continue a previous run with more iterations.
 
         Args:
             resume_state: ResumeState loaded from a previous run.
-            additional_iterations: Number of extra iterations (or use settings).
+            additional_iterations: Number of extra iterations (or use settings).  # noqa: E501
             user_feedback: Optional user comments for the critic to consider.
 
         Returns:
@@ -1892,7 +1931,9 @@ class PaperBananaPipeline:
         if self.settings.auto_refine:
             total_iters = self.settings.max_iterations
         else:
-            total_iters = additional_iterations or self.settings.refinement_iterations
+            total_iters = (
+                additional_iterations or self.settings.refinement_iterations
+            )
 
         start_iter = resume_state.last_iteration
         current_description = resume_state.last_description
@@ -1924,7 +1965,8 @@ class PaperBananaPipeline:
 
             iter_num = start_iter + i + 1
             logger.info(
-                f"Phase 2: Iteration {iter_num}" + (" (auto)" if self.settings.auto_refine else "")
+                f"Phase 2: Iteration {iter_num}"
+                + (" (auto)" if self.settings.auto_refine else "")
             )
             self._emit_progress(
                 "iteration_started",

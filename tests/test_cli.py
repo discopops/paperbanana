@@ -33,15 +33,24 @@ def invoke_help(*args: str) -> str:
 
 
 def test_generate_dry_run_valid_inputs():
-    """paperbanana generate --input file.txt --caption 'test' --dry-run works."""
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+    """paperbanana generate --input file.txt --caption 'test' --dry-run works."""  # noqa: E501
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".txt", delete=False
+    ) as f:
         f.write("Sample methodology text for testing.")
         input_path = f.name
 
     try:
         result = runner.invoke(
             app,
-            ["generate", "--input", input_path, "--caption", "test", "--dry-run"],
+            [
+                "generate",
+                "--input",
+                input_path,
+                "--caption",
+                "test",
+                "--dry-run",
+            ],
         )
         assert result.exit_code == 0
         assert "Dry Run" in result.output
@@ -58,7 +67,14 @@ def test_generate_dry_run_invalid_input():
     """Dry run with missing input file exits with error."""
     result = runner.invoke(
         app,
-        ["generate", "--input", "/nonexistent/path.txt", "--caption", "test", "--dry-run"],
+        [
+            "generate",
+            "--input",
+            "/nonexistent/path.txt",
+            "--caption",
+            "test",
+            "--dry-run",
+        ],
     )
     assert result.exit_code == 1
     assert "not found" in result.output.lower() or "Error" in result.output
@@ -66,7 +82,9 @@ def test_generate_dry_run_invalid_input():
 
 def test_generate_accepts_progress_json_flag():
     """paperbanana generate accepts --progress-json flag in dry-run mode."""
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".txt", delete=False
+    ) as f:
         f.write("Sample methodology text for testing.")
         input_path = f.name
 
@@ -83,7 +101,7 @@ def test_generate_accepts_progress_json_flag():
                 "--progress-json",
             ],
         )
-        # Dry run doesn't emit progress events, but the flag should be accepted.
+        # Dry run doesn't emit progress events, but the flag should be accepted.  # noqa: E501
         assert result.exit_code == 0
     finally:
         Path(input_path).unlink(missing_ok=True)
@@ -360,7 +378,7 @@ def test_sweep_pdf_pages_rejected_for_text_input(tmp_path):
 
 
 def test_sweep_writes_report_with_mocked_pipeline(tmp_path, monkeypatch):
-    """Non-dry sweep writes sweep_report.json with timing, ranking, and completed status."""
+    """Non-dry sweep writes sweep_report.json with timing, ranking, and completed status."""  # noqa: E501
     input_path = tmp_path / "input.txt"
     input_path.write_text("Method details", encoding="utf-8")
 
@@ -389,13 +407,17 @@ def test_sweep_writes_report_with_mocked_pipeline(tmp_path, monkeypatch):
                         iteration=1,
                         description="d",
                         image_path=img,
-                        critique=CritiqueResult(critic_suggestions=suggestions),
+                        critique=CritiqueResult(
+                            critic_suggestions=suggestions
+                        ),
                     )
                 ],
                 metadata={"run_id": f"run_{call_state['n']}"},
             )
 
-    monkeypatch.setattr("paperbanana.core.pipeline.PaperBananaPipeline", _FakePipeline)
+    monkeypatch.setattr(
+        "paperbanana.core.pipeline.PaperBananaPipeline", _FakePipeline
+    )
 
     result = runner.invoke(
         app,
@@ -586,7 +608,10 @@ def test_generate_no_vector_flag_accepted():
 
 def test_ablate_retrieval_writes_report(monkeypatch):
     """ablate-retrieval writes a JSON report and exits cleanly."""
-    from paperbanana.evaluation.retrieval_ablation import AblationReport, AblationVariantResult
+    from paperbanana.evaluation.retrieval_ablation import (
+        AblationReport,
+        AblationVariantResult,
+    )
 
     captured: dict[str, object] = {}
 
@@ -624,7 +649,7 @@ def test_ablate_retrieval_writes_report(monkeypatch):
                         total_seconds=10.0,
                         retrieval_seconds=1.0,
                         metric_mode="proxy_only",
-                        component_alignment_metric="critic_suggestion_count_proxy",
+                        component_alignment_metric="critic_suggestion_count_proxy",  # noqa: E501
                     )
                 ],
                 summary={
@@ -640,7 +665,9 @@ def test_ablate_retrieval_writes_report(monkeypatch):
         @staticmethod
         def save_report(report, path):
             output_path = Path(path)
-            output_path.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+            output_path.write_text(
+                report.model_dump_json(indent=2), encoding="utf-8"
+            )
             return output_path
 
     monkeypatch.setattr(
@@ -648,11 +675,15 @@ def test_ablate_retrieval_writes_report(monkeypatch):
         _FakeRunner,
     )
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as input_file:
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".txt", delete=False
+    ) as input_file:
         input_file.write("Method details")
         input_path = input_file.name
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as report_file:
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", delete=False
+    ) as report_file:
         report_path = report_file.name
 
     try:
@@ -703,7 +734,9 @@ def test_setup_official_api_flow_writes_key_and_clears_base_url(monkeypatch):
             "test-gemini-key",
         ]
     )
-    monkeypatch.setattr("paperbanana.cli.Prompt.ask", lambda *args, **kwargs: next(answers))
+    monkeypatch.setattr(
+        "paperbanana.cli.Prompt.ask", lambda *args, **kwargs: next(answers)
+    )
 
     with runner.isolated_filesystem():
         result = runner.invoke(app, ["setup"])
@@ -714,7 +747,7 @@ def test_setup_official_api_flow_writes_key_and_clears_base_url(monkeypatch):
 
 
 def test_setup_updates_existing_env_without_overwrite(monkeypatch):
-    """setup updates target keys while preserving unrelated existing env vars."""
+    """setup updates target keys while preserving unrelated existing env vars."""  # noqa: E501
     answers = iter(
         [
             "y",
@@ -722,7 +755,9 @@ def test_setup_updates_existing_env_without_overwrite(monkeypatch):
             "new-gemini-key",
         ]
     )
-    monkeypatch.setattr("paperbanana.cli.Prompt.ask", lambda *args, **kwargs: next(answers))
+    monkeypatch.setattr(
+        "paperbanana.cli.Prompt.ask", lambda *args, **kwargs: next(answers)
+    )
 
     with runner.isolated_filesystem():
         Path(".env").write_text(
@@ -738,7 +773,7 @@ def test_setup_updates_existing_env_without_overwrite(monkeypatch):
 
 
 def test_setup_custom_endpoint_flow_writes_url_and_key(monkeypatch):
-    """Custom endpoint setup flow writes both GOOGLE_BASE_URL and GOOGLE_API_KEY."""
+    """Custom endpoint setup flow writes both GOOGLE_BASE_URL and GOOGLE_API_KEY."""  # noqa: E501
     answers = iter(
         [
             "n",
@@ -746,7 +781,9 @@ def test_setup_custom_endpoint_flow_writes_url_and_key(monkeypatch):
             "key-custom",
         ]
     )
-    monkeypatch.setattr("paperbanana.cli.Prompt.ask", lambda *args, **kwargs: next(answers))
+    monkeypatch.setattr(
+        "paperbanana.cli.Prompt.ask", lambda *args, **kwargs: next(answers)
+    )
 
     with runner.isolated_filesystem():
         result = runner.invoke(app, ["setup"])
@@ -766,7 +803,9 @@ def test_setup_custom_endpoint_requires_non_empty_url(monkeypatch):
             "key-custom",
         ]
     )
-    monkeypatch.setattr("paperbanana.cli.Prompt.ask", lambda *args, **kwargs: next(answers))
+    monkeypatch.setattr(
+        "paperbanana.cli.Prompt.ask", lambda *args, **kwargs: next(answers)
+    )
 
     with runner.isolated_filesystem():
         result = runner.invoke(app, ["setup"])
@@ -787,8 +826,16 @@ def test_batch_resume_retry_failed(tmp_path, monkeypatch):
         json.dumps(
             {
                 "items": [
-                    {"id": "ok", "input": str(input_a), "caption": "always ok"},
-                    {"id": "flaky", "input": str(input_b), "caption": "fails once"},
+                    {
+                        "id": "ok",
+                        "input": str(input_a),
+                        "caption": "always ok",
+                    },
+                    {
+                        "id": "flaky",
+                        "input": str(input_b),
+                        "caption": "fails once",
+                    },
                 ]
             }
         ),
@@ -802,21 +849,35 @@ def test_batch_resume_retry_failed(tmp_path, monkeypatch):
             self.settings = settings
 
         async def generate(self, gen_input):
-            from paperbanana.core.types import GenerationOutput, IterationRecord
+            from paperbanana.core.types import (
+                GenerationOutput,
+                IterationRecord,
+            )
 
             if "fails once" in gen_input.communicative_intent:
                 call_state["flaky_calls"] += 1
                 if call_state["flaky_calls"] == 1:
                     raise RuntimeError("transient boom")
-            image_path = str(tmp_path / f"{gen_input.communicative_intent.replace(' ', '_')}.png")
+            image_path = str(
+                tmp_path
+                / f"{gen_input.communicative_intent.replace(' ', '_')}.png"
+            )
             return GenerationOutput(
                 image_path=image_path,
                 description="d",
-                iterations=[IterationRecord(iteration=1, description="d", image_path=image_path)],
-                metadata={"run_id": f"run_{gen_input.communicative_intent.replace(' ', '_')}"},
+                iterations=[
+                    IterationRecord(
+                        iteration=1, description="d", image_path=image_path
+                    )
+                ],
+                metadata={
+                    "run_id": f"run_{gen_input.communicative_intent.replace(' ', '_')}"  # noqa: E501
+                },
             )
 
-    monkeypatch.setattr("paperbanana.core.pipeline.PaperBananaPipeline", _FakePipeline)
+    monkeypatch.setattr(
+        "paperbanana.core.pipeline.PaperBananaPipeline", _FakePipeline
+    )
 
     first = runner.invoke(
         app,
@@ -827,7 +888,9 @@ def test_batch_resume_retry_failed(tmp_path, monkeypatch):
     assert len(batches) == 1
     batch_dir = batches[0].parent
     first_report = json.loads(batches[0].read_text(encoding="utf-8"))
-    statuses = {item["id"]: item.get("status") for item in first_report["items"]}
+    statuses = {
+        item["id"]: item.get("status") for item in first_report["items"]
+    }
     assert statuses["ok"] == "success"
     assert statuses["flaky"] == "failed"
 
@@ -845,8 +908,12 @@ def test_batch_resume_retry_failed(tmp_path, monkeypatch):
         ],
     )
     assert second.exit_code == 0
-    resumed_report = json.loads((batch_dir / "batch_report.json").read_text(encoding="utf-8"))
-    statuses = {item["id"]: item.get("status") for item in resumed_report["items"]}
+    resumed_report = json.loads(
+        (batch_dir / "batch_report.json").read_text(encoding="utf-8")
+    )
+    statuses = {
+        item["id"]: item.get("status") for item in resumed_report["items"]
+    }
     assert statuses["ok"] == "success"
     assert statuses["flaky"] == "success"
 
@@ -861,7 +928,11 @@ def test_plot_batch_supports_concurrency_and_retries(tmp_path, monkeypatch):
             {
                 "items": [
                     {"id": "p1", "data": str(data_path), "intent": "ok plot"},
-                    {"id": "p2", "data": str(data_path), "intent": "flaky plot"},
+                    {
+                        "id": "p2",
+                        "data": str(data_path),
+                        "intent": "flaky plot",
+                    },
                 ]
             }
         ),
@@ -875,21 +946,33 @@ def test_plot_batch_supports_concurrency_and_retries(tmp_path, monkeypatch):
             self.settings = settings
 
         async def generate(self, gen_input):
-            from paperbanana.core.types import GenerationOutput, IterationRecord
+            from paperbanana.core.types import (
+                GenerationOutput,
+                IterationRecord,
+            )
 
             if "flaky" in gen_input.communicative_intent:
                 state["flaky_calls"] += 1
                 if state["flaky_calls"] == 1:
                     raise RuntimeError("temporary")
-            img = str(tmp_path / f"{gen_input.communicative_intent.replace(' ', '_')}.png")
+            img = str(
+                tmp_path
+                / f"{gen_input.communicative_intent.replace(' ', '_')}.png"
+            )
             return GenerationOutput(
                 image_path=img,
                 description="d",
-                iterations=[IterationRecord(iteration=1, description="d", image_path=img)],
+                iterations=[
+                    IterationRecord(
+                        iteration=1, description="d", image_path=img
+                    )
+                ],
                 metadata={"run_id": "run_plot"},
             )
 
-    monkeypatch.setattr("paperbanana.core.pipeline.PaperBananaPipeline", _FakePipeline)
+    monkeypatch.setattr(
+        "paperbanana.core.pipeline.PaperBananaPipeline", _FakePipeline
+    )
 
     result = runner.invoke(
         app,

@@ -90,7 +90,8 @@ def build_studio_app(
                     seed_int = None
         return build_settings(
             config_path=(cfg or "").strip() or None,
-            output_dir=(out_dir or default_output_dir).strip() or default_output_dir,
+            output_dir=(out_dir or default_output_dir).strip()
+            or default_output_dir,
             vlm_provider=vlm_p,
             vlm_model=vlm_m,
             image_provider=img_p,
@@ -145,12 +146,25 @@ def build_studio_app(
                     choices=["png", "jpeg", "webp", "svg"],
                     value="png",
                 )
-                iters = gr.Number(label="Refinement iterations", value=3, precision=0, minimum=1)
-                max_it = gr.Number(label="Max iterations (auto mode cap)", value=30, precision=0)
+                iters = gr.Number(
+                    label="Refinement iterations",
+                    value=3,
+                    precision=0,
+                    minimum=1,
+                )
+                max_it = gr.Number(
+                    label="Max iterations (auto mode cap)",
+                    value=30,
+                    precision=0,
+                )
             with gr.Row():
                 opt = gr.Checkbox(label="Optimize inputs", value=False)
-                auto = gr.Checkbox(label="Auto-refine until critic satisfied", value=False)
-                save_pr = gr.Checkbox(label="Save prompts to run dir", value=True)
+                auto = gr.Checkbox(
+                    label="Auto-refine until critic satisfied", value=False
+                )
+                save_pr = gr.Checkbox(
+                    label="Save prompts to run dir", value=True
+                )
             seed_val = gr.Number(
                 label="Random seed (optional)",
                 value=None,
@@ -182,8 +196,8 @@ def build_studio_app(
     ) as demo:
         gr.Markdown(
             "# PaperBanana Studio\n"
-            "Generate methodology diagrams, statistical plots, and run evaluations "
-            "in the browser. API keys are read from your environment or `.env` "
+            "Generate methodology diagrams, statistical plots, and run evaluations "  # noqa: E501
+            "in the browser. API keys are read from your environment or `.env` "  # noqa: E501
             "(same as the CLI)."
         )
 
@@ -214,7 +228,7 @@ def build_studio_app(
                 ctx_text = gr.Textbox(
                     label="Methodology / context",
                     lines=12,
-                    placeholder="Describe your method, architecture, or paste a paper excerpt…",
+                    placeholder="Describe your method, architecture, or paste a paper excerpt…",  # noqa: E501
                 )
                 ctx_file = gr.File(
                     label="Context file (optional)",
@@ -223,7 +237,7 @@ def build_studio_app(
                 cap = gr.Textbox(
                     label="Figure caption / communicative intent",
                     lines=2,
-                    placeholder="e.g. Overview of our encoder–decoder with sparse routing",
+                    placeholder="e.g. Overview of our encoder–decoder with sparse routing",  # noqa: E501
                 )
                 ar = gr.Dropdown(
                     label="Aspect ratio",
@@ -327,13 +341,15 @@ def build_studio_app(
             # ── Plot ────────────────────────────────────────────────────
             with gr.Tab("Plot"):
                 gr.Markdown(
-                    "Upload a **CSV** or **JSON** data file and describe the plot you want."
+                    "Upload a **CSV** or **JSON** data file and describe the plot you want."  # noqa: E501
                 )
-                data_f = gr.File(label="Data file", file_types=[".csv", ".json"])
+                data_f = gr.File(
+                    label="Data file", file_types=[".csv", ".json"]
+                )
                 intent = gr.Textbox(
                     label="Communicative intent",
                     lines=2,
-                    placeholder="e.g. Bar chart comparing accuracy across benchmarks",
+                    placeholder="e.g. Bar chart comparing accuracy across benchmarks",  # noqa: E501
                 )
                 ar_p = gr.Dropdown(
                     label="Aspect ratio",
@@ -342,7 +358,9 @@ def build_studio_app(
                 )
                 p_log = gr.Textbox(label="Progress log", lines=18)
                 p_img = gr.Image(label="Final plot", type="filepath")
-                p_gal = gr.Gallery(label="Iteration images", columns=4, height=240)
+                p_gal = gr.Gallery(
+                    label="Iteration images", columns=4, height=240
+                )
                 p_go = gr.Button("Generate plot", variant="primary")
 
                 def _do_plot(
@@ -365,12 +383,18 @@ def build_studio_app(
                 ):
                     _dotenv()
                     try:
-                        st = _settings(od, c, vp, vm, ip, im, fo, it, au, mx, op, sp, sd)
+                        st = _settings(
+                            od, c, vp, vm, ip, im, fo, it, au, mx, op, sp, sd
+                        )
                         path = _upload_path(dfile)
                         if not path:
                             return "Upload a data file.", None, []
                         if not (inten or "").strip():
-                            return "Communicative intent is required.", None, []
+                            return (
+                                "Communicative intent is required.",
+                                None,
+                                [],
+                            )
                         log, img, gal, err = run_plot(
                             st, path, inten, aspect, verbose_logging=False
                         )
@@ -406,8 +430,8 @@ def build_studio_app(
             # ── Evaluate ────────────────────────────────────────────────
             with gr.Tab("Evaluate"):
                 gr.Markdown(
-                    "Compare a **generated** image to a **human reference** using the "
-                    "paper’s VLM-as-judge protocol (four dimensions + overall)."
+                    "Compare a **generated** image to a **human reference** using the "  # noqa: E501
+                    "paper’s VLM-as-judge protocol (four dimensions + overall)."  # noqa: E501
                 )
                 ev_target = gr.Radio(
                     label="Evaluation target",
@@ -454,7 +478,9 @@ def build_studio_app(
                 ):
                     _dotenv()
                     try:
-                        st = _settings(od, c, vp, vm, ip, im, fo, it, au, mx, op, sp, sd)
+                        st = _settings(
+                            od, c, vp, vm, ip, im, fo, it, au, mx, op, sp, sd
+                        )
                         gp = _upload_path(gen) or ""
                         rp = _upload_path(ref) or ""
                         ctx = merge_context(etext, _upload_path(efile))
@@ -507,7 +533,7 @@ def build_studio_app(
             # ── Continue run ─────────────────────────────────────────────
             with gr.Tab("Continue"):
                 gr.Markdown(
-                    "Load state from a previous **run_*** folder under the output directory "
+                    "Load state from a previous **run_*** folder under the output directory "  # noqa: E501
                     "and run more visualizer–critic iterations."
                 )
                 cr_id = gr.Textbox(
@@ -517,7 +543,7 @@ def build_studio_app(
                 cr_fb = gr.Textbox(
                     label="Feedback for critic (optional)",
                     lines=3,
-                    placeholder="e.g. Make arrows thicker and increase color contrast",
+                    placeholder="e.g. Make arrows thicker and increase color contrast",  # noqa: E501
                 )
                 cr_extra = gr.Number(
                     label="Additional iterations (optional)",
@@ -527,7 +553,9 @@ def build_studio_app(
                 )
                 cr_log = gr.Textbox(label="Progress log", lines=16)
                 cr_img = gr.Image(label="Latest result", type="filepath")
-                cr_gal = gr.Gallery(label="New iteration images", columns=4, height=200)
+                cr_gal = gr.Gallery(
+                    label="New iteration images", columns=4, height=200
+                )
                 cr_go = gr.Button("Continue run", variant="primary")
 
                 def _do_continue(
@@ -550,7 +578,9 @@ def build_studio_app(
                 ):
                     _dotenv()
                     try:
-                        st = _settings(od, c, vp, vm, ip, im, fo, it, au, mx, op, sp, sd)
+                        st = _settings(
+                            od, c, vp, vm, ip, im, fo, it, au, mx, op, sp, sd
+                        )
                         if not (rid or "").strip():
                             return "Run ID is required.", None, []
                         ex: Optional[int] = None
@@ -563,7 +593,8 @@ def build_studio_app(
                                 ex = None
                         log, img, gal, err = run_continue(
                             st,
-                            (od or default_output_dir).strip() or default_output_dir,
+                            (od or default_output_dir).strip()
+                            or default_output_dir,
                             rid,
                             fb or "",
                             ex,
@@ -601,9 +632,9 @@ def build_studio_app(
             # ── Batch ───────────────────────────────────────────────────
             with gr.Tab("Batch"):
                 gr.Markdown(
-                    "Upload a **YAML** or **JSON** manifest. **Methodology** manifests "
-                    "match `paperbanana batch` (`input` + `caption` per item). "
-                    "**Plot** manifests match `paperbanana plot-batch` (`data` + `intent`). "
+                    "Upload a **YAML** or **JSON** manifest. **Methodology** manifests "  # noqa: E501
+                    "match `paperbanana batch` (`input` + `caption` per item). "  # noqa: E501
+                    "**Plot** manifests match `paperbanana plot-batch` (`data` + `intent`). "  # noqa: E501
                     "Paths resolve relative to the manifest directory."
                 )
                 b_mode = gr.Radio(
@@ -611,7 +642,9 @@ def build_studio_app(
                     choices=["Methodology diagrams", "Statistical plots"],
                     value="Methodology diagrams",
                 )
-                bf = gr.File(label="Manifest", file_types=[".yaml", ".yml", ".json"])
+                bf = gr.File(
+                    label="Manifest", file_types=[".yaml", ".yml", ".json"]
+                )
                 b_ar = gr.Dropdown(
                     label="Default aspect ratio (plots only)",
                     choices=ASPECT_RATIO_CHOICES,
@@ -621,12 +654,18 @@ def build_studio_app(
                     b_resume = gr.Textbox(
                         label="Resume batch (ID or path)",
                         lines=1,
-                        placeholder="Optional: batch_... or /path/to/batch_dir",
+                        placeholder="Optional: batch_... or /path/to/batch_dir",  # noqa: E501
                     )
-                    b_retry_failed = gr.Checkbox(label="Retry failed items", value=False)
+                    b_retry_failed = gr.Checkbox(
+                        label="Retry failed items", value=False
+                    )
                 with gr.Row():
-                    b_max_retries = gr.Number(label="Max retries per item", value=0, precision=0)
-                    b_concurrency = gr.Number(label="Concurrency", value=1, precision=0)
+                    b_max_retries = gr.Number(
+                        label="Max retries per item", value=0, precision=0
+                    )
+                    b_concurrency = gr.Number(
+                        label="Concurrency", value=1, precision=0
+                    )
                 b_log = gr.Textbox(label="Batch log", lines=22)
                 b_dir = gr.Textbox(label="Batch output directory", lines=1)
                 b_go = gr.Button("Run batch", variant="primary")
@@ -655,7 +694,9 @@ def build_studio_app(
                 ):
                     _dotenv()
                     try:
-                        st0 = _settings(od, c, vp, vm, ip, im, fo, it, au, mx, op, sp, sd)
+                        st0 = _settings(
+                            od, c, vp, vm, ip, im, fo, it, au, mx, op, sp, sd
+                        )
                         path = _upload_path(mfile)
                         if not path:
                             return "Upload a manifest file.", ""
@@ -664,7 +705,8 @@ def build_studio_app(
                                 st0,
                                 path,
                                 default_aspect_ratio_label=bar,
-                                resume_batch=(resume_ref or "").strip() or None,
+                                resume_batch=(resume_ref or "").strip()
+                                or None,
                                 retry_failed=bool(retry_fail),
                                 max_retries=max(0, int(max_retry_count or 0)),
                                 concurrency=max(1, int(conc or 1)),
@@ -674,7 +716,8 @@ def build_studio_app(
                             log, bpath = run_batch(
                                 st0,
                                 path,
-                                resume_batch=(resume_ref or "").strip() or None,
+                                resume_batch=(resume_ref or "").strip()
+                                or None,
                                 retry_failed=bool(retry_fail),
                                 max_retries=max(0, int(max_retry_count or 0)),
                                 concurrency=max(1, int(conc or 1)),
@@ -1092,7 +1135,9 @@ def build_studio_app(
 
             # ── Runs browser ──────────────────────────────────────────────
             with gr.Tab("Runs"):
-                gr.Markdown("Inspect previous **run_*** and **batch_*** directories.")
+                gr.Markdown(
+                    "Inspect previous **run_*** and **batch_*** directories."
+                )
                 rb_refresh = gr.Button("Refresh lists")
                 with gr.Row():
                     run_pick = gr.Dropdown(
@@ -1105,7 +1150,9 @@ def build_studio_app(
                         choices=[],
                         allow_custom_value=True,
                     )
-                rb_img = gr.Image(label="Final output (selected run)", type="filepath")
+                rb_img = gr.Image(
+                    label="Final output (selected run)", type="filepath"
+                )
                 rb_meta = gr.Textbox(label="metadata.json (preview)", lines=14)
                 rb_inp = gr.Textbox(label="run_input.json (preview)", lines=10)
                 rb_gal = gr.Gallery(label="Iteration thumbnails", columns=4, height=220)
@@ -1131,7 +1178,9 @@ def build_studio_app(
                 cmp_right_details = gr.Textbox(label="Right run details", lines=12)
 
                 def _refresh(od: str):
-                    root = (od or default_output_dir).strip() or default_output_dir
+                    root = (
+                        od or default_output_dir
+                    ).strip() or default_output_dir
                     r = runs_mod.list_run_ids(root)
                     b = runs_mod.list_batch_ids(root)
                     left_default = r[-2] if len(r) >= 2 else (r[-1] if r else None)
@@ -1145,18 +1194,25 @@ def build_studio_app(
                 def _show_run(od: str, rid: Optional[str]):
                     if not rid:
                         return None, "", "", []
-                    root = (od or default_output_dir).strip() or default_output_dir
+                    root = (
+                        od or default_output_dir
+                    ).strip() or default_output_dir
                     s = runs_mod.load_run_summary(root, rid)
                     img = s.get("final_image")
                     meta = s.get("metadata_preview") or ""
                     inp = s.get("run_input_preview") or ""
-                    gal = [(p, Path(p).name) for p in s.get("iteration_images") or []]
+                    gal = [
+                        (p, Path(p).name)
+                        for p in s.get("iteration_images") or []
+                    ]
                     return img if img else None, meta, inp, gal
 
                 def _show_batch(od: str, bid: Optional[str]):
                     if not bid:
                         return ""
-                    root = (od or default_output_dir).strip() or default_output_dir
+                    root = (
+                        od or default_output_dir
+                    ).strip() or default_output_dir
                     s = runs_mod.load_batch_summary(root, bid)
                     return s.get("report_preview") or ""
 
@@ -1242,7 +1298,7 @@ def build_studio_app(
 
         gr.Markdown(
             "---\n"
-            "Tip: run `paperbanana data download` for the expanded reference set. "
+            "Tip: run `paperbanana data download` for the expanded reference set. "  # noqa: E501
             "Studio optional install: `pip install 'paperbanana[studio]'`."
         )
 

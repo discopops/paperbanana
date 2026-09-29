@@ -29,7 +29,9 @@ class TestVenueSettings:
         settings = Settings()
         assert settings.venue == "neurips"
 
-    @pytest.mark.parametrize("venue", ["neurips", "icml", "acl", "ieee", "custom"])
+    @pytest.mark.parametrize(
+        "venue", ["neurips", "icml", "acl", "ieee", "custom"]
+    )
     def test_valid_venues_accepted(self, venue):
         settings = Settings(venue=venue)
         assert settings.venue == venue
@@ -44,7 +46,9 @@ class TestVenueSettings:
         assert settings.venue == "mylab"
 
     def test_venue_from_yaml(self):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False
+        ) as f:
             yaml.safe_dump({"pipeline": {"venue": "ieee"}}, f)
             path = f.name
 
@@ -55,7 +59,9 @@ class TestVenueSettings:
             Path(path).unlink(missing_ok=True)
 
     def test_venue_cli_override_beats_yaml(self):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False
+        ) as f:
             yaml.safe_dump({"pipeline": {"venue": "neurips"}}, f)
             path = f.name
 
@@ -90,7 +96,9 @@ class TestMethodologyGuidelinesLoader:
     """load_methodology_guidelines venue resolution logic."""
 
     def test_venue_specific_path_resolved(self, guidelines_tree):
-        result = load_methodology_guidelines(str(guidelines_tree), venue="icml")
+        result = load_methodology_guidelines(
+            str(guidelines_tree), venue="icml"
+        )
         assert result == "icml-methodology"
 
     def test_unknown_venue_raises(self, guidelines_tree, monkeypatch, tmp_path):
@@ -101,7 +109,9 @@ class TestMethodologyGuidelinesLoader:
 
     def test_custom_venue_uses_flat_path(self, guidelines_tree):
         """venue='custom' skips venue subdirectory resolution."""
-        result = load_methodology_guidelines(str(guidelines_tree), venue="custom")
+        result = load_methodology_guidelines(
+            str(guidelines_tree), venue="custom"
+        )
         assert result == "flat-methodology"
 
     def test_no_venue_uses_flat_path(self, guidelines_tree):
@@ -114,7 +124,9 @@ class TestMethodologyGuidelinesLoader:
         assert result == DEFAULT_METHODOLOGY_GUIDELINES
 
     def test_missing_directory_returns_hardcoded_default(self):
-        result = load_methodology_guidelines("/nonexistent/path", venue="neurips")
+        result = load_methodology_guidelines(
+            "/nonexistent/path", venue="neurips"
+        )
         assert result == DEFAULT_METHODOLOGY_GUIDELINES
 
     @pytest.mark.parametrize("venue", ["neurips", "icml", "acl", "ieee"])
@@ -162,9 +174,11 @@ class TestPlotGuidelinesLoader:
 
 
 class TestShippedGuidelineFiles:
-    """Verify that all venue guideline files actually exist in data/guidelines/."""
+    """Verify that all venue guideline files actually exist in data/guidelines/."""  # noqa: E501
 
-    GUIDELINES_DIR = Path(__file__).resolve().parent.parent / "data" / "guidelines"
+    GUIDELINES_DIR = (
+        Path(__file__).resolve().parent.parent / "data" / "guidelines"
+    )
 
     @pytest.mark.parametrize("venue", ["icml", "acl", "ieee"])
     def test_methodology_guide_exists(self, venue):
@@ -203,7 +217,7 @@ class TestBackwardCompatibility:
         assert settings.venue == "neurips"
 
     def test_flat_path_config_still_works(self, tmp_path):
-        """A user with guidelines_path pointing to a flat directory still works."""
+        """A user with guidelines_path pointing to a flat directory still works."""  # noqa: E501
         (tmp_path / "methodology_style_guide.md").write_text("my custom guide")
         result = load_methodology_guidelines(str(tmp_path), venue="custom")
         assert result == "my custom guide"

@@ -18,10 +18,22 @@ LOCAL_PROVIDERS: frozenset[str] = frozenset({"ollama", "openai_local"})
 # (provider, model_prefix) -> {"input_per_1k": USD, "output_per_1k": USD}
 VLM_PRICING: dict[tuple[str, str], dict[str, float]] = {
     # Google Gemini — free tier
-    ("gemini", "gemini-2.0-flash"): {"input_per_1k": 0.0, "output_per_1k": 0.0},
-    ("gemini", "gemini-2.5-flash"): {"input_per_1k": 0.00015, "output_per_1k": 0.0006},
-    ("gemini", "gemini-2.5-pro"): {"input_per_1k": 0.00125, "output_per_1k": 0.01},
-    ("gemini", "gemini-3-pro"): {"input_per_1k": 0.00125, "output_per_1k": 0.005},
+    ("gemini", "gemini-2.0-flash"): {
+        "input_per_1k": 0.0,
+        "output_per_1k": 0.0,
+    },
+    ("gemini", "gemini-2.5-flash"): {
+        "input_per_1k": 0.00015,
+        "output_per_1k": 0.0006,
+    },
+    ("gemini", "gemini-2.5-pro"): {
+        "input_per_1k": 0.00125,
+        "output_per_1k": 0.01,
+    },
+    ("gemini", "gemini-3-pro"): {
+        "input_per_1k": 0.00125,
+        "output_per_1k": 0.005,
+    },
     # OpenAI
     ("openai", "gpt-5.5"): {"input_per_1k": 0.005, "output_per_1k": 0.03},
     ("openai", "gpt-5.2"): {"input_per_1k": 0.0025, "output_per_1k": 0.01},
@@ -31,19 +43,49 @@ VLM_PRICING: dict[tuple[str, str], dict[str, float]] = {
     # Atlas Cloud
     ("atlas", "deepseek-ai/DeepSeek-V3-0324"): {"input_per_1k": 0.00027, "output_per_1k": 0.0011},
     # Anthropic
-    ("anthropic", "claude-sonnet-4"): {"input_per_1k": 0.003, "output_per_1k": 0.015},
-    ("anthropic", "claude-3-5-sonnet"): {"input_per_1k": 0.003, "output_per_1k": 0.015},
-    ("anthropic", "claude-3-5-haiku"): {"input_per_1k": 0.0008, "output_per_1k": 0.004},
-    ("anthropic", "claude-opus-4"): {"input_per_1k": 0.015, "output_per_1k": 0.075},
+    ("anthropic", "claude-sonnet-4"): {
+        "input_per_1k": 0.003,
+        "output_per_1k": 0.015,
+    },
+    ("anthropic", "claude-3-5-sonnet"): {
+        "input_per_1k": 0.003,
+        "output_per_1k": 0.015,
+    },
+    ("anthropic", "claude-3-5-haiku"): {
+        "input_per_1k": 0.0008,
+        "output_per_1k": 0.004,
+    },
+    ("anthropic", "claude-opus-4"): {
+        "input_per_1k": 0.015,
+        "output_per_1k": 0.075,
+    },
     # Bedrock (approximate — varies by region)
-    ("bedrock", "us.amazon.nova-pro"): {"input_per_1k": 0.0008, "output_per_1k": 0.0032},
-    ("bedrock", "us.amazon.nova-lite"): {"input_per_1k": 0.00006, "output_per_1k": 0.00024},
-    ("bedrock", "anthropic.claude-3-5-sonnet"): {"input_per_1k": 0.003, "output_per_1k": 0.015},
+    ("bedrock", "us.amazon.nova-pro"): {
+        "input_per_1k": 0.0008,
+        "output_per_1k": 0.0032,
+    },
+    ("bedrock", "us.amazon.nova-lite"): {
+        "input_per_1k": 0.00006,
+        "output_per_1k": 0.00024,
+    },
+    ("bedrock", "anthropic.claude-3-5-sonnet"): {
+        "input_per_1k": 0.003,
+        "output_per_1k": 0.015,
+    },
     # OpenRouter — passthrough pricing depends on underlying model;
     # use a reasonable default for popular models
-    ("openrouter", "google/gemini-3-flash-preview"): {"input_per_1k": 0.0, "output_per_1k": 0.0},
-    ("openrouter", "google/gemini-2.0-flash"): {"input_per_1k": 0.0, "output_per_1k": 0.0},
-    ("openrouter", "openai/gpt-4o"): {"input_per_1k": 0.0025, "output_per_1k": 0.01},
+    ("openrouter", "google/gemini-3-flash-preview"): {
+        "input_per_1k": 0.0,
+        "output_per_1k": 0.0,
+    },
+    ("openrouter", "google/gemini-2.0-flash"): {
+        "input_per_1k": 0.0,
+        "output_per_1k": 0.0,
+    },
+    ("openrouter", "openai/gpt-4o"): {
+        "input_per_1k": 0.0025,
+        "output_per_1k": 0.01,
+    },
 }
 
 # (provider, model_prefix) -> USD per image
@@ -110,5 +152,7 @@ def lookup_image_price(provider: str, model: str) -> float | None:
             best_len = len(m)
 
     if best_match is None:
-        logger.warning("Unknown image gen pricing", provider=provider, model=model)
+        logger.warning(
+            "Unknown image gen pricing", provider=provider, model=model
+        )
     return best_match

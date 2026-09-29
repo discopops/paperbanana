@@ -115,7 +115,7 @@ class AnthropicVLM(VLMProvider):
 
         response = await client.messages.create(**params)
 
-        # Anthropic returns a list of content blocks; we concatenate all text blocks.
+        # Anthropic returns a list of content blocks; we concatenate all text blocks.  # noqa: E501
         parts: list[str] = []
         for block in getattr(response, "content", []):
             # Support both SDK objects and plain dicts in tests.

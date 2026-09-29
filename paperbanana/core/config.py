@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Literal, Optional
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
 
@@ -103,11 +103,15 @@ class Settings(BaseSettings):
     guidelines_path: str = "data/guidelines"
 
     # Cache settings
-    cache_dir: Optional[str] = Field(default=None, alias="PAPERBANANA_CACHE_DIR")
+    cache_dir: Optional[str] = Field(
+        default=None, alias="PAPERBANANA_CACHE_DIR"
+    )
 
     # Cost tracking
     budget_usd: Optional[float] = Field(
-        default=None, gt=0, description="Budget cap in USD; pipeline aborts if exceeded"
+        default=None,
+        gt=0,
+        description="Budget cap in USD; pipeline aborts if exceeded",
     )
 
     # Output settings
@@ -129,7 +133,9 @@ class Settings(BaseSettings):
 
     # API Keys (loaded from environment)
     google_api_key: Optional[str] = Field(default=None, alias="GOOGLE_API_KEY")
-    openrouter_api_key: Optional[str] = Field(default=None, alias="OPENROUTER_API_KEY")
+    openrouter_api_key: Optional[str] = Field(
+        default=None, alias="OPENROUTER_API_KEY"
+    )
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
     atlascloud_api_key: Optional[str] = Field(default=None, alias="ATLASCLOUD_API_KEY")
     anthropic_api_key: Optional[str] = Field(default=None, alias="ANTHROPIC_API_KEY")
@@ -167,8 +173,12 @@ class Settings(BaseSettings):
     # AWS Bedrock settings
     aws_region: str = Field(default="us-east-1", alias="AWS_REGION")
     aws_profile: Optional[str] = Field(default=None, alias="AWS_PROFILE")
-    bedrock_vlm_model: Optional[str] = Field(default=None, alias="BEDROCK_VLM_MODEL")
-    bedrock_image_model: Optional[str] = Field(default=None, alias="BEDROCK_IMAGE_MODEL")
+    bedrock_vlm_model: Optional[str] = Field(
+        default=None, alias="BEDROCK_VLM_MODEL"
+    )
+    bedrock_image_model: Optional[str] = Field(
+        default=None, alias="BEDROCK_IMAGE_MODEL"
+    )
 
     @property
     def effective_vlm_model(self) -> str:
@@ -197,7 +207,9 @@ class Settings(BaseSettings):
         return self.image_model
 
     # SSL
-    skip_ssl_verification: bool = Field(default=False, alias="SKIP_SSL_VERIFICATION")
+    skip_ssl_verification: bool = Field(
+        default=False, alias="SKIP_SSL_VERIFICATION"
+    )
 
     model_config = {
         "env_file": ".env",
@@ -214,7 +226,9 @@ class Settings(BaseSettings):
             return "png"
         v = str(v).lower()
         if v not in ("png", "jpeg", "webp"):
-            raise ValueError(f"output_format must be png, jpeg, or webp. Got: {v}")
+            raise ValueError(
+                f"output_format must be png, jpeg, or webp. Got: {v}"
+            )
         return v
 
     @field_validator("output_resolution", mode="before")
@@ -330,8 +344,8 @@ def _flatten_yaml(config: dict, prefix: str = "") -> dict:
         "pipeline.exemplar_retrieval_endpoint": "exemplar_retrieval_endpoint",
         "pipeline.exemplar_retrieval_mode": "exemplar_retrieval_mode",
         "pipeline.exemplar_retrieval_top_k": "exemplar_retrieval_top_k",
-        "pipeline.exemplar_retrieval_timeout_seconds": "exemplar_retrieval_timeout_seconds",
-        "pipeline.exemplar_retrieval_max_retries": "exemplar_retrieval_max_retries",
+        "pipeline.exemplar_retrieval_timeout_seconds": "exemplar_retrieval_timeout_seconds",  # noqa: E501
+        "pipeline.exemplar_retrieval_max_retries": "exemplar_retrieval_max_retries",  # noqa: E501
         "reference.path": "reference_set_path",
         "reference.category": "reference_category",
         "reference.guidelines_path": "guidelines_path",

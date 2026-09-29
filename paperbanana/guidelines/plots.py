@@ -28,10 +28,10 @@ bare-bones styling toward a more graphic, publication-ready presentation.
 ### Color Palettes
 
 Categorical Data:
-- Soft Pastels: Matte, low-saturation colors (salmon, sky blue, mint, lavender).
+- Soft Pastels: Matte, low-saturation colors (salmon, sky blue, mint, lavender).  # noqa: E501
 - Muted Earth Tones: Olive, beige, slate grey, and navy.
 - High-Contrast Primaries: Used sparingly.
-- Accessibility Mode: Combine color with geometric patterns (hatches, dots, stripes).
+- Accessibility Mode: Combine color with geometric patterns (hatches, dots, stripes).  # noqa: E501
 
 Sequential & Heatmaps:
 - Perceptually Uniform: "Viridis" and "Magma/Plasma" are the standard.
@@ -139,7 +139,9 @@ def load_plot_guidelines(
         # Flat path: {guidelines_path}/plot_style_guide.md
         flat_path = Path(guidelines_path) / "plot_style_guide.md"
         if flat_path.exists():
-            logger.info("Loading plot guidelines (flat path)", path=str(flat_path))
+            logger.info(
+                "Loading plot guidelines (flat path)", path=str(flat_path)
+            )
             return flat_path.read_text(encoding="utf-8")
 
     return DEFAULT_PLOT_GUIDELINES

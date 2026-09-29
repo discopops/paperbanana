@@ -120,13 +120,19 @@ def aggregate_results(entries: list[BenchmarkEntryResult]) -> dict:
     ties = len(scored) - model_wins - human_wins
 
     overall_scores = [_score(e) for e in scored]
-    mean_overall = sum(overall_scores) / len(overall_scores) if overall_scores else 0.0
+    mean_overall = (
+        sum(overall_scores) / len(overall_scores) if overall_scores else 0.0
+    )
 
     # Per-dimension means
     dimension_means: dict[str, float] = {}
     for dim in DIMENSIONS:
         key = f"{dim}_score"
-        values = [float(e.evaluation[key]) for e in scored if e.evaluation and key in e.evaluation]
+        values = [
+            float(e.evaluation[key])
+            for e in scored
+            if e.evaluation and key in e.evaluation
+        ]
         if values:
             dimension_means[dim] = round(sum(values) / len(values), 1)
 
@@ -192,7 +198,9 @@ class BenchmarkRunner:
         self,
         settings: Settings,
         *,
-        pipeline_factory: Callable[[Settings], PaperBananaPipeline] = PaperBananaPipeline,
+        pipeline_factory: Callable[
+            [Settings], PaperBananaPipeline
+        ] = PaperBananaPipeline,
         judge_factory: Optional[Callable[[Settings], VLMJudge]] = None,
         visualizer_factory: Optional[Callable[[Settings], VisualizerAgent]] = None,
     ):
@@ -204,7 +212,9 @@ class BenchmarkRunner:
         # Concurrency for processing benchmark entries (generation + evaluation).
         # Defaults to 1 to preserve existing sequential behaviour unless
         # explicitly overridden by the caller.
-        self.concurrency: int = max(1, getattr(settings, "benchmark_concurrency", 1))
+        self.concurrency: int = max(
+            1, getattr(settings, "benchmark_concurrency", 1)
+        )
 
     def _default_judge_factory(self, settings: Settings) -> VLMJudge:
         from paperbanana.core.utils import find_prompt_dir
@@ -255,14 +265,18 @@ class BenchmarkRunner:
         ids: Optional[list[str]] = None,
         limit: Optional[int] = None,
     ) -> list[ReferenceExample]:
-        """Load benchmark entries from the reference store with optional filtering."""
+        """Load benchmark entries from the reference store with optional filtering."""  # noqa: E501
         store = ReferenceStore.from_settings(self.settings)
         examples = store.get_all()
 
         if not examples:
-            raise ValueError("No benchmark entries found. Run 'paperbanana data download' first.")
+            raise ValueError(
+                "No benchmark entries found. Run 'paperbanana data download' first."  # noqa: E501
+            )
 
-        filtered = filter_examples(examples, category=category, ids=ids, limit=limit)
+        filtered = filter_examples(
+            examples, category=category, ids=ids, limit=limit
+        )
         logger.info(
             "Loaded benchmark entries",
             total=len(examples),
@@ -339,7 +353,9 @@ class BenchmarkRunner:
 
         completed = [r for r in results if r.evaluation is not None]
         failed = [r for r in results if r.error is not None]
-        skipped = [r for r in results if r.error is None and r.evaluation is None]
+        skipped = [
+            r for r in results if r.error is None and r.evaluation is None
+        ]
 
         report = BenchmarkReport(
             created_at=datetime.datetime.now().isoformat(),
@@ -425,7 +441,9 @@ class BenchmarkRunner:
                 image_path = str(candidate)
             else:
                 result.error = f"generated image not found in {eval_only_dir}"
-                logger.warning("Skipping eval-only entry: image not found", id=entry.id)
+                logger.warning(
+                    "Skipping eval-only entry: image not found", id=entry.id
+                )
                 return result
         elif mode == "vanilla":
             try:
@@ -459,7 +477,9 @@ class BenchmarkRunner:
                         aspect_ratio=aspect_ratio,
                     )
                 )
-                result.generation_seconds = round(time.perf_counter() - gen_start, 1)
+                result.generation_seconds = round(
+                    time.perf_counter() - gen_start, 1
+                )
                 result.run_id = gen_output.metadata.get("run_id")
                 result.image_path = gen_output.image_path
                 result.iteration_count = len(gen_output.iterations)

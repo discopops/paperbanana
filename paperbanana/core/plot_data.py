@@ -11,9 +11,9 @@ def _normalize_json_plot_payload(loaded: Any) -> Any:
     """Match legacy Studio/plot behavior for JSON files.
 
     - Top-level JSON array → used as-is (rows for the plot).
-    - Top-level object with a ``data`` key → unwrap so ``raw_data={"data": payload}``
-      is not double-nested; same as ``raw if isinstance(raw, list) else raw.get("data", raw)``.
-    - Other top-level values (e.g. a single object without ``data``) → used as-is.
+    - Top-level object with a ``data`` key → unwrap so ``raw_data={"data": payload}``  # noqa: E501
+      is not double-nested; same as ``raw if isinstance(raw, list) else raw.get("data", raw)``.  # noqa: E501
+    - Other top-level values (e.g. a single object without ``data``) → used as-is.  # noqa: E501
     """
     if isinstance(loaded, list):
         return loaded
@@ -23,9 +23,9 @@ def _normalize_json_plot_payload(loaded: Any) -> Any:
 
 
 def load_statistical_plot_payload(data_path: Path) -> tuple[str, Any]:
-    """Read a data file and return (source_context, payload) for GenerationInput.
+    """Read a data file and return (source_context, payload) for GenerationInput.  # noqa: E501
 
-    ``payload`` is passed as ``raw_data={"data": payload}`` (CSV yields a list of rows).
+    ``payload`` is passed as ``raw_data={"data": payload}`` (CSV yields a list of rows).  # noqa: E501
     """
     data_path = Path(data_path).resolve()
     if not data_path.is_file():
@@ -46,4 +46,6 @@ def load_statistical_plot_payload(data_path: Path) -> tuple[str, Any]:
         payload = _normalize_json_plot_payload(loaded)
         source_context = f"JSON data:\n{json.dumps(payload, indent=2)[:2000]}"
         return source_context, payload
-    raise ValueError(f"Plot data must be .csv or .json, got: {data_path.suffix}")
+    raise ValueError(
+        f"Plot data must be .csv or .json, got: {data_path.suffix}"
+    )

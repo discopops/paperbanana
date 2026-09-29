@@ -27,15 +27,20 @@ class InputOptimizerAgent(BaseAgent):
     """
 
     def __init__(
-        self, vlm_provider: VLMProvider, prompt_dir: str = "prompts", prompt_recorder=None
+        self,
+        vlm_provider: VLMProvider,
+        prompt_dir: str = "prompts",
+        prompt_recorder=None,
     ):
-        super().__init__(vlm_provider, prompt_dir, prompt_recorder=prompt_recorder)
+        super().__init__(
+            vlm_provider, prompt_dir, prompt_recorder=prompt_recorder
+        )
 
     @property
     def agent_name(self) -> str:
         return "optimizer"
 
-    async def run(
+    async def run(  # type: ignore[override]
         self,
         source_context: str,
         caption: str,
@@ -51,11 +56,17 @@ class InputOptimizerAgent(BaseAgent):
         Returns:
             Dict with 'optimized_context' and 'optimized_caption'.
         """
-        prompt_type = "diagram" if diagram_type == DiagramType.METHODOLOGY else "plot"
+        prompt_type = (
+            "diagram" if diagram_type == DiagramType.METHODOLOGY else "plot"
+        )
 
         # Load both prompt templates
-        context_template = self._load_sub_prompt(prompt_type, "context_enricher")
-        caption_template = self._load_sub_prompt(prompt_type, "caption_sharpener")
+        context_template = self._load_sub_prompt(
+            prompt_type, "context_enricher"
+        )
+        caption_template = self._load_sub_prompt(
+            prompt_type, "caption_sharpener"
+        )
 
         context_prompt = self.format_prompt(
             context_template,

@@ -117,6 +117,11 @@ def build_summary(entries: list[PromptComparisonEntry]) -> dict:
     if not scored:
         return {}
 
+    def _overall_score(result: Optional[PromptVariantResult]) -> float:
+        if result is None or result.evaluation is None:
+            return 0.0
+        return float(result.evaluation.get("overall_score", 0.0))
+
     variant_wins = sum(1 for e in scored if e.winner == "variant")
     baseline_wins = sum(1 for e in scored if e.winner == "baseline")
     ties = len(scored) - variant_wins - baseline_wins
@@ -129,8 +134,8 @@ def build_summary(entries: list[PromptComparisonEntry]) -> dict:
     overall_deltas = [e.overall_delta for e in scored]
     mean_overall_delta = round(sum(overall_deltas) / len(overall_deltas), 1)
 
-    baseline_scores = [float(e.baseline.evaluation.get("overall_score", 0.0)) for e in scored]
-    variant_scores = [float(e.variant.evaluation.get("overall_score", 0.0)) for e in scored]
+    baseline_scores = [_overall_score(e.baseline) for e in scored]
+    variant_scores = [_overall_score(e.variant) for e in scored]
 
     return {
         "scored": len(scored),
@@ -141,8 +146,12 @@ def build_summary(entries: list[PromptComparisonEntry]) -> dict:
         "baseline_win_rate": round(baseline_wins / len(scored) * 100, 1),
         "mean_dimension_deltas": mean_deltas,
         "mean_overall_delta": mean_overall_delta,
-        "mean_baseline_score": round(sum(baseline_scores) / len(baseline_scores), 1),
-        "mean_variant_score": round(sum(variant_scores) / len(variant_scores), 1),
+        "mean_baseline_score": round(
+            sum(baseline_scores) / len(baseline_scores), 1
+        ),
+        "mean_variant_score": round(
+            sum(variant_scores) / len(variant_scores), 1
+        ),
     }
 
 
@@ -156,7 +165,7 @@ def validate_prompt_dir(prompt_dir: str) -> None:
         raise ValueError(f"Prompt directory does not exist: {prompt_dir}")
     if not (p / "diagram").is_dir() and not (p / "plot").is_dir():
         raise ValueError(
-            f"Prompt directory missing expected subdirectory (diagram/ or plot/): {prompt_dir}"
+            f"Prompt directory missing expected subdirectory (diagram/ or plot/): {prompt_dir}"  # noqa: E501
         )
 
 
@@ -171,7 +180,9 @@ class PromptAblationRunner:
         variant_prompt_dir: str,
         baseline_name: str = "baseline",
         variant_name: str = "variant",
-        pipeline_factory: Callable[[Settings], PaperBananaPipeline] = PaperBananaPipeline,
+        pipeline_factory: Callable[
+            [Settings], PaperBananaPipeline
+        ] = PaperBananaPipeline,
         judge_factory: Optional[Callable[[Settings], VLMJudge]] = None,
     ):
         self.base_settings = base_settings
@@ -198,13 +209,17 @@ class PromptAblationRunner:
         entry_id: str,
     ) -> PromptVariantResult:
         """Generate a single entry with a specific prompt configuration."""
-        result = PromptVariantResult(entry_id=entry_id, variant_name=variant_name)
+        result = PromptVariantResult(
+            entry_id=entry_id, variant_name=variant_name
+        )
         try:
             settings = self._settings_for_variant(prompt_dir)
             pipeline = self.pipeline_factory(settings)
             gen_start = time.perf_counter()
             output = await pipeline.generate(input_data)
-            result.generation_seconds = round(time.perf_counter() - gen_start, 1)
+            result.generation_seconds = round(
+                time.perf_counter() - gen_start, 1
+            )
             result.run_id = str(output.metadata.get("run_id", ""))
             result.image_path = output.image_path
             result.iteration_count = len(output.iterations)
@@ -319,7 +334,8 @@ class PromptAblationRunner:
         failed = sum(
             1
             for e in results
-            if (e.baseline and e.baseline.error) or (e.variant and e.variant.error)
+            if (e.baseline and e.baseline.error)
+            or (e.variant and e.variant.error)
         )
 
         return PromptAblationReport(
@@ -346,5 +362,7 @@ class PromptAblationRunner:
         """Write the report to a JSON file."""
         output_path = Path(path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+        output_path.write_text(
+            report.model_dump_json(indent=2), encoding="utf-8"
+        )
         return output_path

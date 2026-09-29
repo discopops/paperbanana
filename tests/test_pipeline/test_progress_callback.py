@@ -6,7 +6,9 @@ import json
 
 import pytest
 
-pytest.importorskip("PIL", reason="PIL/Pillow required for pipeline image mock")
+pytest.importorskip(
+    "PIL", reason="PIL/Pillow required for pipeline image mock"
+)
 from PIL import Image
 
 from paperbanana.core.config import Settings
@@ -59,11 +61,15 @@ async def test_progress_callback_receives_events(tmp_path):
         responses=[
             "Initial plan description",
             "Styled final description",
-            json.dumps({"critic_suggestions": [], "revised_description": None}),
+            json.dumps(
+                {"critic_suggestions": [], "revised_description": None}
+            ),
         ]
     )
     image_gen = _MockImageGen()
-    pipeline = PaperBananaPipeline(settings=settings, vlm_client=vlm, image_gen_fn=image_gen)
+    pipeline = PaperBananaPipeline(
+        settings=settings, vlm_client=vlm, image_gen_fn=image_gen
+    )
 
     await pipeline.generate(
         GenerationInput(
@@ -86,11 +92,15 @@ async def test_progress_callback_receives_events(tmp_path):
     assert PipelineProgressStage.CRITIC_START in stages
     assert PipelineProgressStage.CRITIC_END in stages
 
-    retriever_end = next(e for e in events if e.stage == PipelineProgressStage.RETRIEVER_END)
+    retriever_end = next(
+        e for e in events if e.stage == PipelineProgressStage.RETRIEVER_END
+    )
     assert retriever_end.seconds is not None
     assert retriever_end.seconds >= 0
 
-    critic_ends = [e for e in events if e.stage == PipelineProgressStage.CRITIC_END]
+    critic_ends = [
+        e for e in events if e.stage == PipelineProgressStage.CRITIC_END
+    ]
     assert len(critic_ends) >= 1
     assert critic_ends[0].iteration is not None
     assert critic_ends[0].extra is not None
@@ -98,7 +108,9 @@ async def test_progress_callback_receives_events(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_progress_callback_with_optimize_receives_optimizer_events(tmp_path):
+async def test_progress_callback_with_optimize_receives_optimizer_events(
+    tmp_path,
+):
     """With optimize_inputs=True, callback receives optimizer start/end."""
     events: list[PipelineProgressEvent] = []
 
@@ -120,11 +132,15 @@ async def test_progress_callback_with_optimize_receives_optimizer_events(tmp_pat
             "Sharp caption",
             "Plan",
             "Styled",
-            json.dumps({"critic_suggestions": [], "revised_description": None}),
+            json.dumps(
+                {"critic_suggestions": [], "revised_description": None}
+            ),
         ]
     )
     image_gen = _MockImageGen()
-    pipeline = PaperBananaPipeline(settings=settings, vlm_client=vlm, image_gen_fn=image_gen)
+    pipeline = PaperBananaPipeline(
+        settings=settings, vlm_client=vlm, image_gen_fn=image_gen
+    )
 
     await pipeline.generate(
         GenerationInput(
@@ -138,7 +154,9 @@ async def test_progress_callback_with_optimize_receives_optimizer_events(tmp_pat
     stages = [e.stage for e in events]
     assert PipelineProgressStage.OPTIMIZER_START in stages
     assert PipelineProgressStage.OPTIMIZER_END in stages
-    optimizer_end = next(e for e in events if e.stage == PipelineProgressStage.OPTIMIZER_END)
+    optimizer_end = next(
+        e for e in events if e.stage == PipelineProgressStage.OPTIMIZER_END
+    )
     assert optimizer_end.seconds is not None
 
 
@@ -155,11 +173,15 @@ async def test_progress_callback_none_is_ignored(tmp_path):
         responses=[
             "Plan",
             "Styled",
-            json.dumps({"critic_suggestions": [], "revised_description": None}),
+            json.dumps(
+                {"critic_suggestions": [], "revised_description": None}
+            ),
         ]
     )
     image_gen = _MockImageGen()
-    pipeline = PaperBananaPipeline(settings=settings, vlm_client=vlm, image_gen_fn=image_gen)
+    pipeline = PaperBananaPipeline(
+        settings=settings, vlm_client=vlm, image_gen_fn=image_gen
+    )
 
     result = await pipeline.generate(
         GenerationInput(

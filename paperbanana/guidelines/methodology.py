@@ -143,7 +143,10 @@ def load_methodology_guidelines(
         # Flat path: {guidelines_path}/methodology_style_guide.md
         flat_path = Path(guidelines_path) / "methodology_style_guide.md"
         if flat_path.exists():
-            logger.info("Loading methodology guidelines (flat path)", path=str(flat_path))
+            logger.info(
+                "Loading methodology guidelines (flat path)",
+                path=str(flat_path),
+            )
             return flat_path.read_text(encoding="utf-8")
 
     return DEFAULT_METHODOLOGY_GUIDELINES

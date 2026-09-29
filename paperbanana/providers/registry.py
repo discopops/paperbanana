@@ -14,7 +14,7 @@ _API_KEY_HINTS = {
     "GOOGLE_API_KEY": (
         "GOOGLE_API_KEY not found.\n\n"
         "To fix this:\n"
-        "  1. Get a free API key at: https://makersuite.google.com/app/apikey\n"
+        "  1. Get a free API key at: https://makersuite.google.com/app/apikey\n"  # noqa: E501
         "  2. Run: paperbanana setup\n\n"
         "Or set it manually:\n"
         "  export GOOGLE_API_KEY=your-key-here"
@@ -102,7 +102,9 @@ class ProviderRegistry:
                 base_url=settings.google_base_url,
             )
         elif provider == "openrouter":
-            _validate_api_key(settings.openrouter_api_key, "OPENROUTER_API_KEY")
+            _validate_api_key(
+                settings.openrouter_api_key, "OPENROUTER_API_KEY"
+            )
             from paperbanana.providers.vlm.openrouter import OpenRouterVLM
 
             return OpenRouterVLM(
@@ -210,7 +212,9 @@ class ProviderRegistry:
             return DummyImageGen()
         elif provider == "google_imagen":
             _validate_api_key(settings.google_api_key, "GOOGLE_API_KEY")
-            from paperbanana.providers.image_gen.google_imagen import GoogleImagenGen
+            from paperbanana.providers.image_gen.google_imagen import (
+                GoogleImagenGen,
+            )
 
             return GoogleImagenGen(
                 api_key=settings.google_api_key,
@@ -218,7 +222,9 @@ class ProviderRegistry:
                 base_url=settings.google_base_url,
             )
         elif provider == "openrouter_imagen":
-            _validate_api_key(settings.openrouter_api_key, "OPENROUTER_API_KEY")
+            _validate_api_key(
+                settings.openrouter_api_key, "OPENROUTER_API_KEY"
+            )
             from paperbanana.providers.image_gen.openrouter_imagen import (
                 OpenRouterImageGen,
             )
@@ -229,7 +235,9 @@ class ProviderRegistry:
             )
         elif provider == "openai_imagen":
             _validate_api_key(settings.openai_api_key, "OPENAI_API_KEY")
-            from paperbanana.providers.image_gen.openai_imagen import OpenAIImageGen
+            from paperbanana.providers.image_gen.openai_imagen import (
+                OpenAIImageGen,
+            )
 
             return OpenAIImageGen(
                 api_key=settings.openai_api_key,
@@ -247,7 +255,9 @@ class ProviderRegistry:
             )
         elif provider == "bedrock_imagen":
             _validate_bedrock_auth(settings.aws_region, settings.aws_profile)
-            from paperbanana.providers.image_gen.bedrock_imagen import BedrockImageGen
+            from paperbanana.providers.image_gen.bedrock_imagen import (
+                BedrockImageGen,
+            )
 
             return BedrockImageGen(
                 model=settings.bedrock_image_model or settings.image_model,

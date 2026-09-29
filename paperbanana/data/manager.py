@@ -1,4 +1,4 @@
-"""Dataset management — download and cache official PaperBananaBench reference sets.
+"""Dataset management — download and cache official PaperBananaBench reference sets.  # noqa: E501
 
 Cache layout:
     ~/.cache/paperbanana/              (or PAPERBANANA_CACHE_DIR)
@@ -74,7 +74,7 @@ def resolve_cache_dir(override: Optional[str] = None) -> Path:
 
 
 class DatasetManager:
-    """Manages downloading and caching of the official PaperBananaBench dataset.
+    """Manages downloading and caching of the official PaperBananaBench dataset.  # noqa: E501
 
     Provides a clean API for:
     - Downloading the dataset from HuggingFace
@@ -87,10 +87,12 @@ class DatasetManager:
         """Initialize DatasetManager.
 
         Args:
-            cache_dir: Override cache directory. Defaults to PAPERBANANA_CACHE_DIR
+            cache_dir: Override cache directory. Defaults to PAPERBANANA_CACHE_DIR  # noqa: E501
                        env var or ~/.cache/paperbanana/.
         """
-        self._cache_dir = resolve_cache_dir(str(cache_dir) if cache_dir else None)
+        self._cache_dir = resolve_cache_dir(
+            str(cache_dir) if cache_dir else None
+        )
 
     @property
     def cache_dir(self) -> Path:
@@ -227,7 +229,7 @@ class DatasetManager:
                     bench_dir = candidates[0]
                 else:
                     raise RuntimeError(
-                        "Could not find PaperBananaBench directory in extracted archive."
+                        "Could not find PaperBananaBench directory in extracted archive."  # noqa: E501
                     )
 
             # Convert and cache
@@ -305,7 +307,7 @@ class DatasetManager:
         example_count: int,
         extra: dict | None = None,
     ) -> None:
-        """Update dataset_info.json, preserving the list of downloaded datasets."""
+        """Update dataset_info.json, preserving the list of downloaded datasets."""  # noqa: E501
         info = self.get_info() or {}
         downloaded = set(info.get("datasets", []))
         # Back-compat: old dataset_info.json without "datasets" key recorded a
@@ -348,7 +350,9 @@ def _download_file(url: str, dest: Path) -> None:
     """Download a file using httpx (already a project dependency)."""
     import httpx
 
-    with httpx.stream("GET", url, follow_redirects=True, timeout=300) as response:
+    with httpx.stream(
+        "GET", url, follow_redirects=True, timeout=300
+    ) as response:
         response.raise_for_status()
         with open(dest, "wb") as f:
             for chunk in response.iter_bytes(chunk_size=8192):
@@ -402,7 +406,9 @@ def _merge_index(index_path: Path, new_examples: list[dict]) -> int:
             no_id.append(ex)
 
     merged = list(by_id.values()) + no_id
-    categories = sorted(set(e.get("category", "") for e in merged if e.get("category")))
+    categories = sorted(
+        set(e.get("category", "") for e in merged if e.get("category"))
+    )
 
     index_data = {
         "metadata": {
@@ -476,7 +482,9 @@ def _import_from_bench(
         ref_file = task_dir / "ref.json"
 
         if not ref_file.exists():
-            logger.warning("Task ref.json not found, skipping", task=t, path=str(ref_file))
+            logger.warning(
+                "Task ref.json not found, skipping", task=t, path=str(ref_file)
+            )
             continue
 
         with open(ref_file, encoding="utf-8") as f:
@@ -524,14 +532,18 @@ def _import_from_bench(
             try:
                 with Image.open(dest_image) as img:
                     w, h = img.size
-                    example["aspect_ratio"] = round(w / h, 2) if h > 0 else None
+                    example["aspect_ratio"] = (
+                        round(w / h, 2) if h > 0 else None
+                    )
             except Exception:
                 example["aspect_ratio"] = None
 
             all_examples.append(example)
             count += 1
 
-        logger.info("Imported task references", task=t, count=count, total=len(entries))
+        logger.info(
+            "Imported task references", task=t, count=count, total=len(entries)
+        )
 
     if not all_examples:
         raise RuntimeError("No examples could be imported from the dataset.")
@@ -648,7 +660,7 @@ def resolve_reference_path(
     3. Built-in reference set (data/reference_sets/)
 
     Args:
-        settings_path: The reference_set_path from Settings (may be default or user-set).
+        settings_path: The reference_set_path from Settings (may be default or user-set).  # noqa: E501
         cache_dir: Optional cache dir override.
 
     Returns:
@@ -656,10 +668,12 @@ def resolve_reference_path(
     """
     default_path = "data/reference_sets"
 
-    # If settings_path differs from the default, the user explicitly configured it
-    # (via env var REFERENCE_SET_PATH, YAML config, or CLI). Honor it unconditionally.
+    # If settings_path differs from the default, the user explicitly configured it  # noqa: E501
+    # (via env var REFERENCE_SET_PATH, YAML config, or CLI). Honor it unconditionally.  # noqa: E501
     if settings_path != default_path:
-        logger.info("Using explicitly configured reference set", path=settings_path)
+        logger.info(
+            "Using explicitly configured reference set", path=settings_path
+        )
         return settings_path
 
     # Check if any expanded dataset is cached (uses dataset_info.json marker)

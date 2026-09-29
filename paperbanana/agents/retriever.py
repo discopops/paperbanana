@@ -20,15 +20,20 @@ class RetrieverAgent(BaseAgent):
     """
 
     def __init__(
-        self, vlm_provider: VLMProvider, prompt_dir: str = "prompts", prompt_recorder=None
+        self,
+        vlm_provider: VLMProvider,
+        prompt_dir: str = "prompts",
+        prompt_recorder=None,
     ):
-        super().__init__(vlm_provider, prompt_dir, prompt_recorder=prompt_recorder)
+        super().__init__(
+            vlm_provider, prompt_dir, prompt_recorder=prompt_recorder
+        )
 
     @property
     def agent_name(self) -> str:
         return "retriever"
 
-    async def run(
+    async def run(  # type: ignore[override]
         self,
         source_context: str,
         caption: str,
@@ -49,7 +54,9 @@ class RetrieverAgent(BaseAgent):
             List of selected reference examples, ordered by relevance.
         """
         if not candidates:
-            logger.warning("No reference candidates available, returning empty list")
+            logger.warning(
+                "No reference candidates available, returning empty list"
+            )
             return []
 
         # If we have fewer candidates than requested, return all
@@ -65,7 +72,9 @@ class RetrieverAgent(BaseAgent):
         candidates_text = self._format_candidates(candidates)
 
         # Load and format the retriever prompt
-        prompt_type = "diagram" if diagram_type == DiagramType.METHODOLOGY else "plot"
+        prompt_type = (
+            "diagram" if diagram_type == DiagramType.METHODOLOGY else "plot"
+        )
         template = self.load_prompt(prompt_type)
         prompt = self.format_prompt(
             template,

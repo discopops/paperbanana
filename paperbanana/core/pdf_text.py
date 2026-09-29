@@ -4,14 +4,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-_PDF_INSTALL_HINT = "Install PyMuPDF: pip install 'paperbanana[pdf]' or pip install pymupdf"
+_PDF_INSTALL_HINT = (
+    "Install PyMuPDF: pip install 'paperbanana[pdf]' or pip install pymupdf"
+)
 
 
 def parse_pdf_pages_spec(spec: str | None, page_count: int) -> list[int]:
-    """Resolve a 1-based page selection into a sorted unique list of page numbers.
+    """Resolve a 1-based page selection into a sorted unique list of page numbers.  # noqa: E501
 
-    *spec* is ``None``, empty, or whitespace only: all pages ``1 .. page_count``.
-    Otherwise comma-separated tokens: single pages (``3``) or inclusive ranges (``2-5``).
+    *spec* is ``None``, empty, or whitespace only: all pages ``1 .. page_count``.  # noqa: E501
+    Otherwise comma-separated tokens: single pages (``3``) or inclusive ranges (``2-5``).  # noqa: E501
     """
     if page_count < 1:
         raise ValueError("PDF has no pages")
@@ -34,7 +36,9 @@ def parse_pdf_pages_spec(spec: str | None, page_count: int) -> list[int]:
             start, end = end, start
         for p in range(start, end + 1):
             if p < 1 or p > page_count:
-                raise ValueError(f"Page {p} is out of range for this PDF (1–{page_count})")
+                raise ValueError(
+                    f"Page {p} is out of range for this PDF (1–{page_count})"
+                )
             seen.add(p)
 
     if not seen:
@@ -44,13 +48,15 @@ def parse_pdf_pages_spec(spec: str | None, page_count: int) -> list[int]:
 
 
 def extract_text_from_pdf(path: Path, pages_spec: str | None = None) -> str:
-    """Open *path* and extract text from the selected pages (1-based *pages_spec*, see
-    :func:`parse_pdf_pages_spec`). Pages are concatenated with clear separators.
+    """Open *path* and extract text from the selected pages (1-based *pages_spec*, see  # noqa: E501
+    :func:`parse_pdf_pages_spec`). Pages are concatenated with clear separators.  # noqa: E501
     """
     try:
         import fitz  # PyMuPDF
     except ImportError as e:
-        raise ImportError(f"PDF input requires PyMuPDF. {_PDF_INSTALL_HINT}") from e
+        raise ImportError(
+            f"PDF input requires PyMuPDF. {_PDF_INSTALL_HINT}"
+        ) from e
 
     path = Path(path)
     doc = fitz.open(path)

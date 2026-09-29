@@ -43,8 +43,13 @@ class TestMergeIndex:
 
     def test_merge_deduplicates_by_id(self, tmp_path):
         idx = tmp_path / "index.json"
-        _merge_index(idx, [{"id": "a", "category": "old"}, {"id": "b", "category": "keep"}])
-        count = _merge_index(idx, [{"id": "a", "category": "new"}, {"id": "c", "category": "c"}])
+        _merge_index(
+            idx,
+            [{"id": "a", "category": "old"}, {"id": "b", "category": "keep"}],
+        )
+        count = _merge_index(
+            idx, [{"id": "a", "category": "new"}, {"id": "c", "category": "c"}]
+        )
         assert count == 3
         data = json.loads(idx.read_text())
         ids = {e["id"] for e in data["examples"]}
@@ -61,7 +66,9 @@ class TestMergeIndex:
 
     def test_merge_preserves_examples_without_id(self, tmp_path):
         idx = tmp_path / "index.json"
-        _merge_index(idx, [{"id": "a", "category": "cat1"}, {"category": "no_id"}])
+        _merge_index(
+            idx, [{"id": "a", "category": "cat1"}, {"category": "no_id"}]
+        )
         count = _merge_index(idx, [{"category": "also_no_id"}])
         assert count == 3
         data = json.loads(idx.read_text())
@@ -127,7 +134,7 @@ class TestIsDownloaded:
         assert tmp_cache.is_downloaded()
 
     def test_legacy_cache_index_only(self, tmp_cache):
-        """Caches with index.json but no dataset_info.json count as downloaded."""
+        """Caches with index.json but no dataset_info.json count as downloaded."""  # noqa: E501
         tmp_cache.reference_dir.mkdir(parents=True)
         tmp_cache.index_path.write_text(
             json.dumps(
@@ -330,7 +337,9 @@ class TestDownload:
 
 class TestResolveReferencePath:
     def test_explicit_settings_path_wins(self, tmp_path):
-        result = resolve_reference_path("/custom/path", cache_dir=str(tmp_path))
+        result = resolve_reference_path(
+            "/custom/path", cache_dir=str(tmp_path)
+        )
         assert result == "/custom/path"
 
     def test_uses_cache_when_downloaded(self, tmp_path):
@@ -352,11 +361,15 @@ class TestResolveReferencePath:
                 }
             )
         )
-        result = resolve_reference_path("data/reference_sets", cache_dir=str(tmp_path))
+        result = resolve_reference_path(
+            "data/reference_sets", cache_dir=str(tmp_path)
+        )
         assert result == str(ref_dir)
 
     def test_falls_back_to_builtin(self, tmp_path):
-        result = resolve_reference_path("data/reference_sets", cache_dir=str(tmp_path))
+        result = resolve_reference_path(
+            "data/reference_sets", cache_dir=str(tmp_path)
+        )
         assert result == "data/reference_sets"
 
 

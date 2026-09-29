@@ -143,7 +143,9 @@ class CostTracker:
 
     @property
     def image_cost(self) -> float:
-        return sum(e.cost_usd for e in self._entries if e.call_type == "image_gen")
+        return sum(
+            e.cost_usd for e in self._entries if e.call_type == "image_gen"
+        )
 
     @property
     def pricing_complete(self) -> bool:
@@ -164,7 +166,11 @@ class CostTracker:
             "vlm_usd": round(self.vlm_cost, 6),
             "image_usd": round(self.image_cost, 6),
             "pricing_complete": self.pricing_complete,
-            "num_vlm_calls": sum(1 for e in self._entries if e.call_type == "vlm"),
-            "num_image_calls": sum(1 for e in self._entries if e.call_type == "image_gen"),
+            "num_vlm_calls": sum(
+                1 for e in self._entries if e.call_type == "vlm"
+            ),
+            "num_image_calls": sum(
+                1 for e in self._entries if e.call_type == "image_gen"
+            ),
             "by_agent": {k: round(v, 6) for k, v in by_agent.items()},
         }
